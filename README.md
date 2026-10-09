@@ -4,7 +4,7 @@ A one-page site for a fictional biotech clinic, built around one real-time 3D mo
 **unwinds into each service as you scroll** — helix → replication fork → cell → plasmid ring → helix again — floating
 in a field of shader-drawn cells. Light, editorial "specimen sheet" design; fully usable without WebGL.
 
-Live: <!-- LIVE_URL -->
+Live: https://helix-labs-3d.vercel.app
 
 > Concept project — fictional brand. Part of the Alhassan Alfarran creative-development portfolio.
 
