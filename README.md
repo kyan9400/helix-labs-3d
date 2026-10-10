@@ -60,7 +60,7 @@ avoids a second smoothing layer. Post-processing is not used.
 
 ```
 src/
-  app/            layout (fonts, metadata, motion init), page, 404, icon.svg, opengraph-image, robots, sitemap
+  app/            layout (fonts, metadata, motion init), page, 404, icon.svg, opengraph-image.png + twitter-image.png (screenshots of the live site), robots, sitemap
   components/     Stage (tier probe + scroll mapping + lazy Scene), AppointmentForm, MotionToggle, posters, portraits
   components/three/  Scene, Helix, HelixSim (blend + instance matrices), forms, CellField
   lib/            motion preference, quality tiers, shared scroll state

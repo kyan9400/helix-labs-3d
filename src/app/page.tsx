@@ -1,6 +1,7 @@
 import AppointmentForm from "@/components/AppointmentForm";
 import HelixPoster from "@/components/HelixPoster";
 import LogoMark from "@/components/Logo";
+import MobileNav from "@/components/MobileNav";
 import MotionToggle from "@/components/MotionToggle";
 import Portrait from "@/components/Portrait";
 import Reveals from "@/components/Reveals";
@@ -165,9 +166,12 @@ export default function Home() {
               ))}
             </ul>
           </nav>
-          <a className="btn btn--primary btn--small" href="#book">
-            Book a visit
-          </a>
+          <div className="site-header__actions">
+            <a className="btn btn--primary btn--small site-header__cta" href="#book">
+              Book a visit
+            </a>
+            <MobileNav items={NAV} />
+          </div>
         </div>
       </header>
 

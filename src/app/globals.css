@@ -360,6 +360,129 @@ html[data-motion="reduced"] .motion-toggle__dot {
     display: block;
   }
 }
+.site-header__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+/* the menu panel carries the CTA, so the header copy drops out where space runs out */
+@media (max-width: 419px) {
+  .site-header__cta {
+    display: none;
+  }
+}
+
+/* Mobile menu — solid panel (no backdrop-filter over the canvas), transform + opacity only */
+.mnav__button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 var(--space-3);
+  border: 1.5px solid var(--color-ink);
+  border-radius: 999px;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-weight: 700;
+  font-size: 0.9375rem;
+  cursor: pointer;
+}
+.mnav__button:hover {
+  background: var(--color-paper-2);
+}
+.mnav__icon {
+  position: relative;
+  display: inline-block;
+  width: 16px;
+  height: 10px;
+}
+.mnav__icon span {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 1.5px;
+  background: currentColor;
+  transition: transform 0.25s var(--ease-out);
+}
+.mnav__icon span:first-child {
+  top: 0;
+}
+.mnav__icon span:last-child {
+  bottom: 0;
+}
+.mnav__icon[data-open] span:first-child {
+  transform: translateY(4.25px) rotate(45deg);
+}
+.mnav__icon[data-open] span:last-child {
+  transform: translateY(-4.25px) rotate(-45deg);
+}
+.mnav__panel {
+  position: fixed;
+  top: var(--header-h);
+  left: 0;
+  right: 0;
+  z-index: 21;
+  max-height: calc(100svh - var(--header-h));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--space-3) var(--gutter) var(--space-6);
+  background: var(--color-paper);
+  border-bottom: 1px solid var(--color-rule);
+  box-shadow: 0 18px 40px -24px rgba(16, 32, 31, 0.45);
+  opacity: 0;
+  transform: translateY(-8px);
+  visibility: hidden;
+  transition:
+    opacity 0.22s var(--ease-out),
+    transform 0.22s var(--ease-out),
+    visibility 0s linear 0.22s;
+}
+.mnav__panel[data-open] {
+  opacity: 1;
+  transform: none;
+  visibility: visible;
+  transition:
+    opacity 0.22s var(--ease-out),
+    transform 0.22s var(--ease-out),
+    visibility 0s;
+}
+.mnav__list {
+  list-style: none;
+}
+.mnav__list a {
+  display: flex;
+  align-items: center;
+  min-height: 52px;
+  border-bottom: 1px solid var(--color-rule);
+  font-family: var(--font-display);
+  font-size: 1.625rem;
+  line-height: 1.1;
+  color: var(--color-ink);
+  text-decoration: none;
+}
+.mnav__list a:hover {
+  color: var(--color-teal);
+}
+.mnav__cta {
+  width: 100%;
+  margin-top: var(--space-5);
+}
+.mnav__scrim {
+  position: fixed;
+  inset: var(--header-h) 0 0;
+  z-index: 19;
+  background: rgba(16, 32, 31, 0.35);
+}
+html[data-motion="reduced"] .mnav__panel,
+html[data-motion="reduced"] .mnav__icon span {
+  transition: none;
+}
+@media (min-width: 900px) {
+  .mnav {
+    display: none;
+  }
+}
 
 /* ==========================================================================
    3D stage (fixed behind hero + services)
