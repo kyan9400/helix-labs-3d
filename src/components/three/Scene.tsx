@@ -6,12 +6,13 @@ import { PerformanceMonitor } from "@react-three/drei";
 import * as THREE from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import Helix from "./Helix";
-import CellField from "./CellField";
+import CellField, { buildCellGeometry } from "./CellField";
+import { yieldToMain } from "@/lib/defer";
 import { TIERS, type Tier } from "@/lib/quality";
 import { scrollState } from "@/lib/scroll-state";
 import { isReducedMotion, subscribeMotion } from "@/lib/motion";
 
-interface SceneProps {
+export interface SceneProps {
   tier: Tier;
   onReady: () => void;
   onLost: () => void;
@@ -33,9 +34,6 @@ function applyRoomEnvironment(gl: THREE.WebGLRenderer, scene: THREE.Scene) {
 }
 
 function Lighting() {
-  const gl = useThree((s) => s.gl);
-  const scene = useThree((s) => s.scene);
-  useEffect(() => applyRoomEnvironment(gl, scene), [gl, scene]);
   return (
     <>
       <ambientLight intensity={0.35} />
@@ -62,7 +60,10 @@ function Driver() {
   return null;
 }
 
-/** Compiles every shader before the canvas is revealed, so the first scroll never stutters. */
+/**
+ * Warm-up in short tasks: yield, build the environment map, yield, compile every shader, then reveal.
+ * The environment is applied before compiling so the programs are built once, with it.
+ */
 function Warmup({ onReady }: { onReady: () => void }) {
   const gl = useThree((s) => s.gl);
   const scene = useThree((s) => s.scene);
@@ -70,15 +71,21 @@ function Warmup({ onReady }: { onReady: () => void }) {
   const invalidate = useThree((s) => s.invalidate);
   useEffect(() => {
     let alive = true;
-    gl.compileAsync(scene, camera)
-      .catch(() => undefined)
-      .then(() => {
-        if (!alive) return;
-        invalidate();
-        requestAnimationFrame(() => requestAnimationFrame(() => alive && onReady()));
-      });
+    let disposeEnv: (() => void) | null = null;
+    (async () => {
+      await yieldToMain();
+      if (!alive) return;
+      disposeEnv = applyRoomEnvironment(gl, scene);
+      await yieldToMain();
+      if (!alive) return;
+      await gl.compileAsync(scene, camera).catch(() => undefined);
+      if (!alive) return;
+      invalidate();
+      requestAnimationFrame(() => requestAnimationFrame(() => alive && onReady()));
+    })();
     return () => {
       alive = false;
+      disposeEnv?.();
     };
   }, [gl, scene, camera, invalidate, onReady]);
   return null;
@@ -92,6 +99,26 @@ export default function Scene({ tier, onReady, onLost }: SceneProps) {
   // With reduced motion every frame is on demand (scroll-driven); the gaps between them would read as a slow GPU
   // to PerformanceMonitor, so it only samples while the loop runs continuously.
   const reduced = useSyncExternalStore(subscribeMotion, isReducedMotion, () => true);
+  const [cells, setCells] = useState<THREE.BufferGeometry | null>(null);
+
+  // build the particle buffers in their own task, before the Canvas mounts
+  useEffect(() => {
+    let alive = true;
+    let built: THREE.BufferGeometry | null = null;
+    yieldToMain().then(() => {
+      if (!alive) return;
+      built = buildCellGeometry(settings.particles);
+      return yieldToMain().then(() => {
+        if (alive && built) setCells(built);
+      });
+    });
+    return () => {
+      alive = false;
+      built?.dispose();
+    };
+  }, [settings.particles]);
+
+  if (!cells) return null;
 
   return (
     <Canvas
@@ -120,7 +147,7 @@ export default function Scene({ tier, onReady, onLost }: SceneProps) {
         />
       )}
       <Lighting />
-      <CellField count={settings.particles} />
+      <CellField geometry={cells} />
       <Helix settings={settings} />
       <Driver />
       <Warmup onReady={onReady} />

@@ -63,19 +63,22 @@ stops rendering completely.
 |---|---|---|---|---|---|
 | high | discrete GPU, non-touch | 64 | 1400 | 2 | MSAA, clearcoat physical material, 24-seg spheres |
 | medium | Intel/AMD iGPU, Mali/Adreno/PowerVR, touch | 52 | 700 | 1.5 | MSAA, standard material, 16-seg |
-| low | software renderer, ≤2 cores, ≤2 GB, Save-Data | 36 | 260 | 1 | no MSAA, 10-seg, no read-head pulse |
+| low | ≤2 cores, ≤2 GB, Save-Data | 36 | 260 | 1 | no MSAA, 10-seg, no read-head pulse |
 
-`?quality=low|medium|high` overrides. drei `<PerformanceMonitor>` drops DPR on decline (floor 0.75) and raises it back.
+Software renderers (SwiftShader, llvmpipe, softpipe, Microsoft Basic Render, Mesa offscreen, or a context that fails
+`failIfMajorPerformanceCaveat`) get no 3D at all: the poster stays and the 3D chunk is never downloaded.
+`?quality=low|medium|high` overrides (and forces the 3D on). drei `<PerformanceMonitor>` drops DPR on decline (floor 0.75) and raises it back.
 
 **Reduced motion.** Respects `prefers-reduced-motion` by default; a "Turn on full motion" toggle (hero + footer) stores
 the choice in `localStorage` (`helix-motion`), `?motion=full|reduced` overrides. Reduced = no spin, no particle drift,
 no read-head pulse, and forms **cut** at the chapter midpoint instead of sweeping. Scroll-linked content still works.
 
 **No WebGL / context lost.** A designed inline SVG poster of the helix (code-made) is always in the hero; the canvas
-fades in over it only after `gl.compileAsync` warm-up. If WebGL is missing or the context is lost, the poster stays and
+fades in over it only after `gl.compileAsync` warm-up. If WebGL is missing, the renderer is software-only or the context is lost, the poster stays and
 the page is fully usable.
 
-**Loading.** The 3D chunk is requested after `load` + idle, so HTML/LCP are never blocked. A mono "Sequencing…" status
+**Loading.** The 3D chunk is imported after `load` + `requestIdleCallback` (2.5 s timeout), never during hydration, so
+HTML/LCP are never blocked. Particle buffers, the environment map and shader compilation run as separate short tasks. A mono "Sequencing…" status
 tag shows until the scene is warm.
 
 ## 5. Design system
@@ -184,5 +187,5 @@ Zero downloaded images, models, HDRIs or audio.
 - First-load JS for `/` < 250 KB gzip (target < 160 KB) excluding the lazy 3D chunk; 3D chunk loaded after idle.
 - 3 draw calls for the molecule + 1 for particles; no shadows, no post-processing.
 - No per-frame allocations, no React state per frame; morph math in preallocated typed arrays.
-- LCP = hero h1 (server-rendered text, fonts `display: swap`); CLS ≈ 0 (canvas is fixed, poster sized).
+- LCP = hero h1 / lead (server-rendered text, no JS reveal, fonts `display: swap`); CLS ≈ 0 (canvas is fixed, poster sized).
 - Lighthouse mobile targets: Performance ≥ 85, Accessibility/Best Practices/SEO ≥ 95.

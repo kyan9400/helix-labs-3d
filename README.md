@@ -42,8 +42,9 @@ avoids a second smoothing layer. Post-processing is not used.
 - Quality tier picked **before** the Canvas exists from a throwaway WebGL probe (GPU name, cores, memory, touch,
   Save-Data): high / medium / low change pair count, particle count, DPR cap (2 / 1.5 / 1), MSAA and materials.
   `?quality=low|medium|high` overrides. drei `PerformanceMonitor` lowers/raises the DPR at runtime.
-- The 3D chunk is requested only after `load` + idle; shaders are warmed with `gl.compileAsync` before the canvas
-  fades in over a code-made SVG poster. No per-frame allocations, no React state per frame.
+- The 3D chunk is imported only after `load` + idle, and never on software renderers (SwiftShader, llvmpipe, …),
+  which keep the poster. Geometry and the environment map are built in short tasks that yield to the main thread,
+  shaders are warmed with `gl.compileAsync`, then the canvas fades in (opacity only) over a code-made SVG poster. No per-frame allocations, no React state per frame.
 - No `backdrop-filter` anywhere; panels over the canvas are solid.
 - First-load JS for `/`: **~179 KB gzip** across all script tags (≈140 KB without the legacy `nomodule` polyfills);
   the lazy 3D chunk is ~241 KB gzip on top.
@@ -53,7 +54,7 @@ avoids a second smoothing layer. Post-processing is not used.
 - `prefers-reduced-motion` is respected by default; a **"Turn on full motion"** toggle (hero + footer) stores the
   choice in `localStorage`, and `?motion=full|reduced` overrides. Reduced motion = no spin, drift, pulse or parallax,
   and forms cut at chapter midpoints instead of sweeping.
-- No WebGL or a lost context → the designed SVG helix poster stays and the page is fully usable.
+- No WebGL, a software renderer or a lost context → the designed SVG helix poster stays and the page is fully usable.
 
 ## Project layout
 

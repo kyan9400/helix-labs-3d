@@ -1,20 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import dynamic from "next/dynamic";
+import { useCallback, useEffect, useRef, useState, type ComponentType } from "react";
+import { afterLoadIdle } from "@/lib/defer";
 import { detectTier, type Tier } from "@/lib/quality";
 import { FORM_COUNT, scrollState } from "@/lib/scroll-state";
+import type { SceneProps } from "./three/Scene";
 
-// The whole 3D scene (three.js + R3F) is a separate chunk, requested after the page is idle.
-const Scene = dynamic(() => import("./three/Scene"), { ssr: false });
-
-type IdleWindow = Window & {
-  requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
-  cancelIdleCallback?: (id: number) => void;
-};
+// The whole 3D scene (three.js + R3F) is a separate chunk, imported only after window 'load' + idle,
+// and only when the GPU probe finds real hardware (or ?quality= forces it). Never during hydration.
+type Loaded = { tier: Tier; Scene: ComponentType<SceneProps> };
 
 export default function Stage() {
-  const [tier, setTier] = useState<Tier | null>(null);
+  const [loaded, setLoaded] = useState<Loaded | null>(null);
   const wrap = useRef<HTMLDivElement>(null);
 
   // Scroll -> continuous form index f (piecewise linear between the chapter centres)
@@ -85,24 +82,24 @@ export default function Stage() {
 
   // Decide the quality tier (and whether WebGL exists) only once the page has loaded and gone idle
   useEffect(() => {
-    const w = window as IdleWindow;
-    let idleId = 0;
-    let timer = 0;
-    const start = () => {
+    let alive = true;
+    const cancel = afterLoadIdle(() => {
       const t = detectTier();
-      if (t) setTier(t);
-      else document.documentElement.dataset.stage = "fallback";
-    };
-    const schedule = () => {
-      if (w.requestIdleCallback) idleId = w.requestIdleCallback(start, { timeout: 2500 });
-      else timer = window.setTimeout(start, 500);
-    };
-    if (document.readyState === "complete") schedule();
-    else window.addEventListener("load", schedule, { once: true });
+      if (!t) {
+        document.documentElement.dataset.stage = "fallback"; // no WebGL or a software renderer: keep the poster
+        return;
+      }
+      import("./three/Scene")
+        .then((m) => {
+          if (alive) setLoaded({ tier: t, Scene: m.default });
+        })
+        .catch(() => {
+          document.documentElement.dataset.stage = "fallback";
+        });
+    });
     return () => {
-      window.removeEventListener("load", schedule);
-      if (idleId && w.cancelIdleCallback) w.cancelIdleCallback(idleId);
-      if (timer) window.clearTimeout(timer);
+      alive = false;
+      cancel();
     };
   }, []);
 
@@ -112,12 +109,12 @@ export default function Stage() {
 
   const onLost = useCallback(() => {
     document.documentElement.dataset.stage = "fallback";
-    setTier(null);
+    setLoaded(null);
   }, []);
 
   return (
     <div ref={wrap} className="stage" aria-hidden="true">
-      {tier ? <Scene tier={tier} onReady={onReady} onLost={onLost} /> : null}
+      {loaded ? <loaded.Scene tier={loaded.tier} onReady={onReady} onLost={onLost} /> : null}
     </div>
   );
 }

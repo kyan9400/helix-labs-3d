@@ -54,7 +54,7 @@ const fragment = /* glsl */ `
 
 const PALETTE = ["#1E9C8F", "#D9472F", "#3F51C9", "#7FB8AE", "#E9A23B"];
 
-function buildCellGeometry(count: number) {
+export function buildCellGeometry(count: number) {
   const g = new THREE.BufferGeometry();
   const pos = new Float32Array(count * 3);
   const size = new Float32Array(count);
@@ -86,17 +86,13 @@ function buildCellGeometry(count: number) {
   return g;
 }
 
-export default function CellField({ count }: { count: number }) {
+export default function CellField({ geometry }: { geometry: THREE.BufferGeometry }) {
   const group = useRef<THREE.Group>(null);
   const material = useRef<THREE.ShaderMaterial>(null);
   const reduced = useRef(true);
   const clock = useRef(0);
 
-  const geometry = useMemo(() => buildCellGeometry(count), [count]);
-
   const uniforms = useMemo(() => ({ uTime: { value: 0 }, uPixelRatio: { value: 1 } }), []);
-
-  useEffect(() => () => geometry.dispose(), [geometry]);
 
   useEffect(() => {
     reduced.current = isReducedMotion();
