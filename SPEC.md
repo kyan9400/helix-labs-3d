@@ -58,16 +58,23 @@ it, a **cell particle field**: `THREE.Points` with a custom shader that draws ea
 **The read (signature moment).** From the hero into Sequencing the camera does a **dolly zoom** (z 12 → 8.7 while fov
 35° → 47°, `z·tan(fov/2)` constant, so the molecule keeps its size and the cell field stretches), the fork unzips live
 with scroll, and the polymerase ring sweeps light along the bases. **Intro:** once the canvas is revealed, the pairs fly
-in from the cell field and assemble while the studio lights come up (environment intensity 0.15 → 0.9 over 1.8 s).
+in from the cell field and assemble while the studio lights come up (environment intensity 0.15 → 1.0 over 1.8 s; the slide fades in first).
 **Drag to rotate** with inertia on the desktop hero.
 
-**Look.** Studio lighting built in code and baked once with PMREM (dark warm room, overhead softbox, tall right strip,
-warm kicker, paper floor bounce) + one key light; ACES Filmic, exposure 1.08. Backbone: clearcoat lacquer with a thin
-iridescent film on high; bases: soft ceramic (clearcoat + sheen); beads: clearcoat. A shader **specimen shadow** (soft
-ink ellipse behind the molecule, sized per form) grounds it on the paper.
+**Look (darkfield redesign).** The molecule now sits in a **darkfield specimen slide**: one shader quad behind it
+(a pill for the strand forms, a disc for the cell, an oval for the plasmid, sized per form) of deep tinted glass with a
+soft centre light, drifting out-of-focus cells (procedural bokeh, 22 / 14 / 8 by tier), a dashed reticle, a scale bar, a
+lit rim and a soft ink shadow on the paper. The slide changes tint per chapter (teal helix, cyan sequencing with a
+bright scan line at the polymerase ring, indigo cell, plum plasmid, green renewal), so each chapter reads differently.
+On phones the hero visual moves above the copy and the helix lies diagonally across a wide slide, then rises upright for
+the services. Materials: backbones are dark glass (clearcoat, iridescent film on high) with a fresnel rim in the strand's
+light colour and packets of light running along each strand in opposite directions (antiparallel); bases are glossy
+candy glass with a constant inner glow, much brighter when the read head passes; beads are small iridescent pearls;
+one additive halo per base pair blooms with the read light. Lighting: PMREM studio environment (code-made, as before) +
+a key light + two coloured rim lights from behind (mint and warm coral); ACES Filmic, exposure 1.08.
 
-**Draw calls:** 2 tubes + beads + rungs + tips + ring ×2 + shells ×2 + shadow + particles = **11 on high and medium**,
-**9 on low** (no shells), and the ring (2) is skipped outside the Sequencing chapter, so usually 9 / 7.
+**Draw calls:** 2 tubes + beads + rungs + tips + halos + ring ×2 + shells ×2 + slide + particles = **12 on high and
+medium**, **10 on low** (no shells), and the ring (2) is skipped outside the Sequencing chapter, so usually 10 / 8.
 
 **Render on demand.** `frameloop="demand"`. A loop runs only while something animates: the morph is settling, or
 autonomous motion is allowed (full motion, tab visible, scene on screen). Past the services section the canvas fades and
@@ -202,7 +209,7 @@ Zero downloaded images, models, HDRIs or audio.
 ## 8. Performance budget
 
 - First-load JS for `/` < 250 KB gzip (target < 160 KB) excluding the lazy 3D chunk; 3D chunk loaded after idle.
-- About 11 draw calls on high, 9 on low (see §4); no shadow maps, no post-processing.
+- About 12 draw calls on high, 10 on low (see §4); no shadow maps, no post-processing.
 - No per-frame allocations, no React state per frame; morph math in preallocated typed arrays.
 - LCP = hero h1 / lead (server-rendered text, no JS reveal, fonts `display: swap`); CLS ≈ 0 (canvas is fixed, poster sized).
 - Lighthouse mobile targets: Performance ≥ 85, Accessibility/Best Practices/SEO ≥ 95.

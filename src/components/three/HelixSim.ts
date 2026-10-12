@@ -9,12 +9,19 @@ import { BASE_COLORS } from "@/lib/sequence";
  */
 
 export { BASE_COLORS };
-export const STRAND_COLORS = ["#134E4A", "#1D2748"];
+/** Deep glass bodies for the two backbones; the light comes from their rims and the packets that run along them. */
+export const STRAND_COLORS = ["#0E3F3B", "#1A2152"];
+/** Light colour per strand: the rim and the light packets (strand A mint, strand B periwinkle). */
+export const STRAND_LIGHT = ["#7CF2D8", "#9AA6FF"];
+/** Pearl phosphate beads, tinted per strand. */
+const BEAD_COLORS = ["#D9F7EE", "#DCE0FF"];
+/** Saturated, slightly lifted 3D variants of the base colours (A, T, G, C); the page keeps the print colours. */
+export const BASE_3D = ["#FF5A3C", "#FFB238", "#20C9B4", "#5868FF"];
 
 const UP = new THREE.Vector3(0, 1, 0);
-export const SPHERE_R = 0.135;
-export const RUNG_R = 0.062;
-export const TUBE_R = 0.07;
+export const SPHERE_R = 0.1;
+export const RUNG_R = 0.056;
+export const TUBE_R = 0.085;
 
 function clamp01(x: number) {
   return Math.min(1, Math.max(0, x));
@@ -45,7 +52,8 @@ export class HelixSim {
   /** per-instance glow for rungs and tips (2 per pair), shared by both meshes */
   readonly glow: Float32Array;
 
-  private gap: Float32Array;
+  /** blended unzip gap per pair */
+  readonly gap: Float32Array;
   private scatter: Float32Array;
   private m = new THREE.Matrix4();
   private q = new THREE.Quaternion();
@@ -56,7 +64,7 @@ export class HelixSim {
   private v = new THREE.Vector3();
   private c = new THREE.Vector3();
   private col = new THREE.Color();
-  private strandColors = STRAND_COLORS.map((h) => new THREE.Color(h));
+  private strandColors = BEAD_COLORS.map((h) => new THREE.Color(h));
 
   constructor(pairs: number) {
     this.pairs = pairs;
@@ -96,10 +104,10 @@ export class HelixSim {
     const n = this.pairs;
     for (let i = 0; i < n; i++) {
       const b = this.seq[i];
-      this.col.set(BASE_COLORS[b]);
+      this.col.set(BASE_3D[b]);
       rungs.setColorAt(i * 2, this.col);
       tips.setColorAt(i * 2, this.col);
-      this.col.set(BASE_COLORS[COMPLEMENT[b]]);
+      this.col.set(BASE_3D[COMPLEMENT[b]]);
       rungs.setColorAt(i * 2 + 1, this.col);
       tips.setColorAt(i * 2 + 1, this.col);
       spheres.setColorAt(i * 2, this.strandColors[0]);
@@ -160,7 +168,7 @@ export class HelixSim {
   update(spheres: THREE.InstancedMesh, rungs: THREE.InstancedMesh, tips: THREE.InstancedMesh, pulse: boolean, ring: number) {
     this.blend();
     const n = this.pairs;
-    const head = ((this.time * 0.16) % 1.5) - 0.25;
+    const head = ((this.time * 0.2) % 1.4) - 0.2;
     const at = this.split * (n - 1);
     const cur = this.cur;
     const glow = this.glow;
@@ -171,7 +179,7 @@ export class HelixSim {
       this.pa.set(cur[o], cur[o + 1], cur[o + 2]);
       this.pb.set(cur[o + 3], cur[o + 4], cur[o + 5]);
 
-      const d = (t - head) / 0.05;
+      const d = (t - head) / 0.07;
       const boost = pulse ? Math.exp(-d * d) : 0;
       // read light: full within ±2 pairs of the ring, then an exponential tail
       const dr = Math.abs(i - at);

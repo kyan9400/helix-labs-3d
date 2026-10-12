@@ -66,6 +66,7 @@ export default function Stage() {
       if (visual) {
         const r = visual.getBoundingClientRect();
         scrollState.heroY = r.top + window.scrollY + r.height / 2;
+        scrollState.heroH = r.height;
       }
       update();
     };

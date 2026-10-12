@@ -19,9 +19,18 @@ export interface SceneProps {
   onLost: () => void;
 }
 
-/** One key light for definition; the rest of the look comes from the baked studio environment. */
+/**
+ * Key light for definition plus two coloured rims from behind (mint left, warm coral right) that outline the glass
+ * strands against the dark specimen slide; the rest comes from the baked studio environment.
+ */
 function Lighting() {
-  return <directionalLight position={[4, 6, 8]} intensity={1.2} />;
+  return (
+    <>
+      <directionalLight position={[4, 6, 8]} intensity={1.3} />
+      <directionalLight position={[-7, 3, -6]} intensity={2.4} color="#7CF2D8" />
+      <directionalLight position={[7, -2, -5]} intensity={1.8} color="#FF9A7A" />
+    </>
+  );
 }
 
 /**

@@ -52,6 +52,18 @@ export class Backbone {
       this.sin[k] = Math.sin((k / radial) * TAU);
     }
     const index = this.buildIndex();
+    // static distance along the strand in pair units (main tube 0..n-1, closure n-1..n, caps at their end):
+    // the shader moves light packets along it
+    const along = new Float32Array(R * radial);
+    for (let i = 0; i < R; i++) {
+      let v: number;
+      if (i < this.mainRings) v = i / steps;
+      else if (i <= this.mainRings + steps) v = pairs - 1 + (i - this.mainRings) / steps;
+      else if (i < this.mainRings + steps + 1 + CAP) v = pairs - 1;
+      else v = 0;
+      along.fill(v, i * radial, (i + 1) * radial);
+    }
+    const alongAttr = new THREE.BufferAttribute(along, 1);
     for (let s = 0; s < 2; s++) {
       const g = new THREE.BufferGeometry();
       const pos = new THREE.BufferAttribute(new Float32Array(R * radial * 3), 3);
@@ -60,6 +72,7 @@ export class Backbone {
       nor.setUsage(THREE.DynamicDrawUsage);
       g.setAttribute("position", pos);
       g.setAttribute("normal", nor);
+      g.setAttribute("aS", alongAttr);
       g.setIndex(index);
       g.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 12);
       this.geometries.push(g);

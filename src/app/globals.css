@@ -731,6 +731,25 @@ html[data-motion="full"] .stage-status__loading {
 .services__intro .lead {
   margin-top: var(--space-4);
 }
+/* phones / portrait: the hero visual (the specimen slide with the helix lying across it) leads, above the copy */
+@media (max-width: 899px), (max-aspect-ratio: 9/10) {
+  .hero {
+    padding-top: var(--space-4);
+  }
+  .hero__visual {
+    order: -1;
+    min-height: 34svh;
+  }
+  .hero__poster {
+    height: 70vw;
+    max-height: 420px;
+    transform: translate(-50%, -50%) rotate(-58deg);
+  }
+  .hero__visual .seq-ruler {
+    display: none;
+  }
+}
+
 /* on portrait screens the molecule passes behind the intro: give the copy a solid panel */
 @media (max-width: 899px), (max-aspect-ratio: 9/10) {
   .services__intro {

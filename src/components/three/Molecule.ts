@@ -1,35 +1,47 @@
 import * as THREE from "three";
 import type { RootState } from "@react-three/fiber";
 import { Backbone } from "./Backbone";
-import { FORK_SPLIT } from "./forms";
-import { HelixSim, STRAND_COLORS, TUBE_R } from "./HelixSim";
+import { FORK_HEIGHT, FORK_SPLIT } from "./forms";
+import { BASE_3D, HelixSim, STRAND_COLORS, STRAND_LIGHT, TUBE_R } from "./HelixSim";
 import type { TierSettings } from "@/lib/tiers";
 import { scrollState } from "@/lib/scroll-state";
 
 /*
  * The whole molecule as a plain three.js object graph (R3F mounts `root` as a primitive).
- *   root (layout: position, scale, lean)
- *     specimen shadow (soft ellipse behind, sized to the current form)
- *     inner (spin)
- *       2 backbone tubes, phosphate beads, half-rungs + rounded tips (read light), polymerase ring, cell shells
+ *   root (layout: position, scale)
+ *     specimen window (darkfield slide behind, sized and tinted per form)
+ *     lean (tilt; on phones the hero helix lies diagonally across the slide)
+ *       inner (spin)
+ *         2 glass backbone tubes (light packets run along them), pearl beads, half-rungs + rounded tips (read light),
+ *         base-pair halos, polymerase ring, cell shells
  * frame() runs everything for one rendered frame and says whether another frame is needed. No per-frame allocation.
  */
 
-const TILT = 0.3;
+const TILT = 0.22;
 const SPIN = 0.22;
 const INTRO_S = 1.8;
 const ENV_MIN = 0.15;
-const ENV_MAX = 0.9;
+const ENV_MAX = 1.0;
 // z·tan(fov/2) stays at this value during the dolly zoom, so the molecule plane keeps its size
 const DOLLY_K = 12 * Math.tan(THREE.MathUtils.degToRad(17.5));
-// [w, h] of each form in molecule space, for the shadow (helix, fork, cell, plasmid, helix)
-const EXTENT = [
-  [3.4, 8.6],
-  [5.4, 8.8],
-  [5.6, 5.6],
-  [6.4, 5.8],
-  [3.8, 9.0],
+// half [w, h] of the specimen window for each form, in molecule space (helix, fork, cell, plasmid, helix)
+const WINDOW = [
+  [2.25, 3.95],
+  [3.0, 4.25],
+  [3.0, 3.0],
+  [3.45, 3.0],
+  [2.45, 4.15],
 ];
+// window tint per form: [centre, edge]. Teal for the helix, cyan for reading, indigo for the cell, plum for the
+// plasmid, deep green for renewal
+const TINT = [
+  ["#16504C", "#041312"],
+  ["#0F4552", "#03111A"],
+  ["#232A78", "#060820"],
+  ["#4A1D3E", "#12060F"],
+  ["#13503F", "#03130E"],
+].map(([c, e]) => [new THREE.Color(c), new THREE.Color(e)]);
+const TINT_LIGHT = ["#7CF2D8", "#86E8FF", "#A9B4FF", "#FFB4C8", "#9CF5C9"].map((h) => new THREE.Color(h));
 
 function clamp01(x: number) {
   return Math.min(1, Math.max(0, x));
@@ -39,7 +51,9 @@ function smooth(x: number) {
   return t * t * (3 - 2 * t);
 }
 
-/** Adds a per-instance emissive "read light": totalEmissiveRadiance += instance colour * aGlow * 1.6. */
+/**
+ * Bases: a soft inner glow in their own colour all the time, plus the per-instance "read light" (aGlow) on top.
+ */
 function withGlow<T extends THREE.Material>(mat: T): T {
   mat.onBeforeCompile = (shader) => {
     shader.vertexShader = shader.vertexShader
@@ -49,28 +63,159 @@ function withGlow<T extends THREE.Material>(mat: T): T {
       .replace("#include <common>", "#include <common>\nvarying float vGlow;")
       .replace(
         "#include <emissivemap_fragment>",
-        "#include <emissivemap_fragment>\n#ifdef USE_COLOR\ntotalEmissiveRadiance += vColor.rgb * vGlow * 1.6;\n#endif",
+        "#include <emissivemap_fragment>\n#ifdef USE_COLOR\ntotalEmissiveRadiance += vColor.rgb * (0.2 + vGlow * 2.4);\n#endif",
       );
   };
   mat.customProgramCacheKey = () => "helix-glow";
   return mat;
 }
 
-const SHADOW_VERT = /* glsl */ `
-  varying vec2 vUv;
+/**
+ * Backbone glass: a fresnel rim in the strand's light colour, plus packets of light that run along the strand
+ * (`aS` = distance in pairs). The two strands run in opposite directions, like real antiparallel DNA.
+ */
+function withFlow<T extends THREE.Material>(mat: T, light: string, dir: number, time: { value: number }, amount: { value: number }): T {
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uTime = time;
+    shader.uniforms.uFlowAmt = amount;
+    shader.uniforms.uFlowCol = { value: new THREE.Color(light) };
+    shader.uniforms.uFlowDir = { value: dir };
+    shader.vertexShader = shader.vertexShader
+      .replace("#include <common>", "#include <common>\nattribute float aS;\nvarying float vS;")
+      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvS = aS;");
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        "#include <common>",
+        "#include <common>\nvarying float vS;\nuniform float uTime;\nuniform float uFlowAmt;\nuniform vec3 uFlowCol;\nuniform float uFlowDir;",
+      )
+      .replace(
+        "#include <emissivemap_fragment>",
+        `#include <emissivemap_fragment>
+        float fRim = pow(1.0 - saturate(dot(normal, normalize(vViewPosition))), 2.4);
+        float fPh = vS * 0.5 * uFlowDir - uTime * 1.5;
+        float fPk = pow(0.5 + 0.5 * sin(fPh), 26.0) + 0.7 * pow(0.5 + 0.5 * sin(fPh * 0.37 + 2.1), 48.0);
+        totalEmissiveRadiance += uFlowCol * (fRim * 0.85 + fPk * 2.6 + 0.05) * uFlowAmt;`,
+      );
+  };
+  mat.customProgramCacheKey = () => `helix-flow-${dir}`;
+  return mat;
+}
+
+/*
+ * Darkfield specimen window: a rounded "slide" behind the molecule (a pill for the strand forms, a disc for the cell),
+ * deep tinted glass with a soft centre light, out-of-focus cells (procedural bokeh), a dashed reticle, a scale bar,
+ * a lit rim and a soft ink shadow on the paper. One quad, one draw call; it replaces the old flat shadow.
+ */
+const BACK_VERT = /* glsl */ `
+  uniform vec2 uQuad;
+  varying vec2 vP;
   void main() {
-    vUv = uv;
+    vP = (uv - 0.5) * uQuad;
     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
   }
 `;
-// soft ellipse in ink; it reaches 0 before the quad edge, so the edge never shows
-const SHADOW_FRAG = /* glsl */ `
+const BACK_FRAG = /* glsl */ `
+  uniform vec2 uHalf;
+  uniform float uMargin;
+  uniform vec3 uCore;
+  uniform vec3 uEdge;
+  uniform vec3 uLight;
+  uniform float uTime;
   uniform float uOpacity;
-  varying vec2 vUv;
+  uniform float uScan;
+  uniform float uScanY;
+  varying vec2 vP;
+  float sdBox(vec2 p, vec2 b, float r) {
+    vec2 q = abs(p) - b + r;
+    return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
+  }
+  float hash(float n) { return fract(sin(n * 12.9898) * 43758.5453); }
   void main() {
-    float r = length((vUv - 0.5) * 2.0);
-    float a = 1.0 - smoothstep(0.0, 1.0, r);
-    gl_FragColor = vec4(0.063, 0.125, 0.122, a * a * 0.14 * uOpacity);
+    vec2 p = vP;
+    float r = min(uHalf.x, uHalf.y);
+    float d = sdBox(p, uHalf, r);
+    float aa = fwidth(d) * 1.2;
+    float inside = 1.0 - smoothstep(-aa, aa, d);
+
+    // soft ink shadow on the paper, offset down-right
+    float ds = sdBox(p - vec2(0.14, -0.3), uHalf, r);
+    float sh = 1.0 - smoothstep(-0.25, uMargin, ds);
+    sh = sh * sh * 0.3;
+
+    // interior: tinted glass lit from the centre and from the upper left
+    float g = exp(-dot(p, p) / (r * r) * 1.1);
+    float k = exp(-length(p - vec2(-0.35, 0.45) * uHalf) / (r * 0.9));
+    vec3 col = mix(uEdge, uCore, g * 0.85 + k * 0.35);
+
+    // out-of-focus cells drifting in the medium
+    for (int i = 0; i < BOKEH; i++) {
+      float fi = float(i);
+      vec2 c = (vec2(hash(fi + 1.3), hash(fi + 7.1)) * 2.0 - 1.0) * uHalf * 0.92;
+      c += vec2(sin(uTime * 0.11 + fi * 1.7), cos(uTime * 0.083 + fi * 2.3)) * 0.3;
+      float h = hash(fi + 3.7);
+      float rr = mix(0.12, 0.62, h * h);
+      float dd = length(p - c);
+      float disc = 1.0 - smoothstep(rr * 0.8, rr, dd);
+      float ring = smoothstep(rr * 0.62, rr * 0.95, dd) * disc;
+      vec3 bc = hash(fi + 9.0) < 0.55 ? uLight : mix(vec3(1.0, 0.42, 0.28), vec3(0.42, 0.48, 1.0), hash(fi + 11.0));
+      col += bc * (disc * 0.035 + ring * 0.07) * mix(0.4, 1.0, hash(fi + 5.0));
+    }
+
+    // dashed reticle circle and a scale bar near the bottom
+    float fw = fwidth(p.x) * 1.5;
+    float rc = r * 0.84;
+    float ang = atan(p.y, p.x) / 6.28318;
+    float dash = step(0.55, fract(ang * 96.0));
+    col += uLight * (1.0 - smoothstep(0.0, fw * 1.4, abs(length(p) - rc))) * dash * 0.16;
+    vec2 sb = p - vec2(0.0, -uHalf.y + r * 0.3);
+    float bar = (1.0 - smoothstep(0.0, fw, abs(sb.y))) * step(abs(sb.x), 0.6);
+    float tick = (1.0 - smoothstep(0.0, fw, abs(fract(sb.x / 0.2 + 0.5) - 0.5) * 0.2)) * step(abs(sb.x), 0.61)
+      * step(sb.y, 0.07) * step(-0.0, sb.y);
+    col += uLight * (bar + tick) * 0.28;
+
+    // read scan (sequencing chapter): a thin bright line with a wide glow
+    float sy = p.y - uScanY;
+    col += uLight * uScan * (exp(-sy * sy / 0.0016) * 0.55 + exp(-abs(sy) * 2.2) * 0.1);
+
+    // vignette towards the edge, an inner glow and a lit rim
+    col *= 0.62 + 0.38 * (1.0 - smoothstep(-r * 0.9, 0.0, d));
+    col += uLight * exp(d / 0.16) * inside * 0.16;
+    col += uLight * exp(-abs(d) / 0.018) * 0.5;
+
+    // dither against banding
+    col += (hash(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) - 0.5) / 128.0;
+
+    vec3 outC = mix(vec3(0.063, 0.125, 0.122), col, inside);
+    gl_FragColor = vec4(outC, max(inside, sh) * uOpacity);
+    #include <colorspace_fragment>
+  }
+`;
+
+/* Soft additive halos on every base pair: the "read" bases bloom as the head passes. */
+const HALO_VERT = /* glsl */ `
+  uniform float uPx;
+  uniform float uOpacity;
+  attribute float aGlow;
+  attribute vec3 aColor;
+  varying vec3 vColor;
+  varying float vA;
+  void main() {
+    vec4 mv = modelViewMatrix * vec4(position, 1.0);
+    gl_Position = projectionMatrix * mv;
+    gl_PointSize = uPx * (0.55 + aGlow * 1.1) / -mv.z;
+    vColor = aColor;
+    vA = (0.16 + aGlow * 0.85) * uOpacity;
+  }
+`;
+const HALO_FRAG = /* glsl */ `
+  varying vec3 vColor;
+  varying float vA;
+  void main() {
+    float d = length(gl_PointCoord - 0.5) * 2.0;
+    if (d > 1.0) discard;
+    float a = exp(-d * d * 4.5) * (1.0 - d);
+    gl_FragColor = vec4(vColor, a * vA);
+    #include <colorspace_fragment>
   }
 `;
 
@@ -128,6 +273,7 @@ export class Molecule {
   readonly root = new THREE.Group();
   readonly sim: HelixSim;
   private readonly settings: TierSettings;
+  private readonly lean = new THREE.Group();
   private readonly inner = new THREE.Group();
   private readonly backbone: Backbone;
   private readonly spheres: THREE.InstancedMesh;
@@ -136,11 +282,17 @@ export class Molecule {
   private readonly ring = new THREE.Group();
   private readonly shells: THREE.Mesh[] = [];
   private readonly shellMats: THREE.ShaderMaterial[] = [];
-  private readonly shadow: THREE.Mesh;
-  private readonly shadowMat: THREE.ShaderMaterial;
+  private readonly back: THREE.Mesh;
+  private readonly backMat: THREE.ShaderMaterial;
+  private readonly halos: THREE.Points;
+  private readonly haloMat: THREE.ShaderMaterial;
+  private readonly haloPos: Float32Array;
+  private readonly haloGlow: Float32Array;
   private readonly disposables: { dispose(): void }[] = [];
   private readonly ringPos = new THREE.Vector3();
   private readonly ringQuat = new THREE.Quaternion();
+  private readonly uTime = { value: 0 };
+  private readonly uFlow = { value: 0 };
   private pulsing = false;
 
   constructor(settings: TierSettings, calm: boolean) {
@@ -150,43 +302,56 @@ export class Molecule {
     this.sim = sim;
     sim.fd = scrollState.f;
     sim.intro = calm ? 1 : 0;
-    this.root.add(this.inner);
+    this.root.add(this.lean);
+    this.lean.add(this.inner);
 
-    // backbone tubes: lacquered ribbon (clearcoat + thin-film sheen on high)
+    // backbone tubes: dark glass with a lit rim, clearcoat (+ thin-film iridescence on high), light packets
     this.backbone = new Backbone(n, settings.tubeSteps, settings.tubeRadial, TUBE_R);
     this.disposables.push(this.backbone);
     STRAND_COLORS.forEach((color, s) => {
-      const mat = settings.physical
+      const base = settings.physical
         ? new THREE.MeshPhysicalMaterial({
             color,
-            roughness: 0.22,
+            roughness: 0.14,
             clearcoat: 1,
-            clearcoatRoughness: 0.08,
+            clearcoatRoughness: 0.04,
             ...(settings.iridescence
-              ? { iridescence: 0.35, iridescenceIOR: 1.3, iridescenceThicknessRange: [180, 420] as [number, number] }
+              ? { iridescence: 0.6, iridescenceIOR: 1.35, iridescenceThicknessRange: [220, 520] as [number, number] }
               : {}),
           })
-        : new THREE.MeshStandardMaterial({ color, roughness: 0.25 });
+        : new THREE.MeshStandardMaterial({ color, roughness: 0.18 });
+      const mat = withFlow(base, STRAND_LIGHT[s], s === 0 ? 1 : -1, this.uTime, this.uFlow);
       const mesh = new THREE.Mesh(this.backbone.geometries[s], mat);
       mesh.frustumCulled = false;
       this.inner.add(mesh);
       this.disposables.push(mat);
     });
 
-    // phosphate beads
+    // phosphate beads: small pearls
     const seg = settings.segments;
     const beadGeo = new THREE.SphereGeometry(1, seg, Math.max(6, Math.round(seg * 0.66)));
     const beadMat = settings.physical
-      ? new THREE.MeshPhysicalMaterial({ roughness: 0.28, metalness: 0.05, clearcoat: 1, clearcoatRoughness: 0.18 })
-      : new THREE.MeshStandardMaterial({ roughness: 0.32, metalness: 0.05 });
+      ? new THREE.MeshPhysicalMaterial({
+          roughness: 0.22,
+          clearcoat: 1,
+          clearcoatRoughness: 0.08,
+          ...(settings.iridescence ? { iridescence: 0.9, iridescenceIOR: 1.4 } : {}),
+        })
+      : new THREE.MeshStandardMaterial({ roughness: 0.26 });
     this.spheres = new THREE.InstancedMesh(beadGeo, beadMat, n * 2);
 
-    // bases: open half-rungs + rounded tips, soft ceramic material with the read light
+    // bases: open half-rungs + rounded tips, glossy candy glass that glows from inside, brighter when read
     const radial = settings.tubeRadial;
     const baseMat = withGlow(
       settings.physical
-        ? new THREE.MeshPhysicalMaterial({ roughness: 0.38, clearcoat: 0.5, sheen: 0.4, sheenColor: new THREE.Color("#ffffff") })
-        : new THREE.MeshStandardMaterial({ roughness: 0.38 }),
+        ? new THREE.MeshPhysicalMaterial({
+            roughness: 0.2,
+            clearcoat: 1,
+            clearcoatRoughness: 0.06,
+            sheen: 0.35,
+            sheenColor: new THREE.Color("#ffffff"),
+          })
+        : new THREE.MeshStandardMaterial({ roughness: 0.24 }),
     );
     const rungGeo = new THREE.CylinderGeometry(1, 1, 1, radial, 1, true);
     const tipGeo = new THREE.SphereGeometry(1, Math.max(8, radial), Math.max(6, Math.round(radial * 0.66)));
@@ -204,16 +369,49 @@ export class Molecule {
     }
     this.disposables.push(beadGeo, beadMat, rungGeo, tipGeo, baseMat);
 
+    // base-pair halos: one additive point per pair, at the middle of the rung
+    this.haloPos = new Float32Array(n * 3);
+    this.haloGlow = new Float32Array(n);
+    const haloCol = new Float32Array(n * 3);
+    const c = new THREE.Color();
+    for (let i = 0; i < n; i++) {
+      c.set(BASE_3D[sim.seq[i]]);
+      haloCol[i * 3] = c.r;
+      haloCol[i * 3 + 1] = c.g;
+      haloCol[i * 3 + 2] = c.b;
+    }
+    const haloGeo = new THREE.BufferGeometry();
+    const hp = new THREE.BufferAttribute(this.haloPos, 3);
+    const hg = new THREE.BufferAttribute(this.haloGlow, 1);
+    hp.setUsage(THREE.DynamicDrawUsage);
+    hg.setUsage(THREE.DynamicDrawUsage);
+    haloGeo.setAttribute("position", hp);
+    haloGeo.setAttribute("aGlow", hg);
+    haloGeo.setAttribute("aColor", new THREE.BufferAttribute(haloCol, 3));
+    this.haloMat = new THREE.ShaderMaterial({
+      vertexShader: HALO_VERT,
+      fragmentShader: HALO_FRAG,
+      uniforms: { uPx: { value: 100 }, uOpacity: { value: 0 } },
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    this.halos = new THREE.Points(haloGeo, this.haloMat);
+    this.halos.frustumCulled = false;
+    this.halos.renderOrder = 2;
+    this.inner.add(this.halos);
+    this.disposables.push(haloGeo, this.haloMat);
+
     // polymerase ring: brushed metal clamp with a mint emissive read head inside
     const ringGeo = new THREE.LatheGeometry(roundedRectProfile(1.25, 0.09, 0.17, 0.05), 48);
     const ringMat = settings.physical
-      ? new THREE.MeshPhysicalMaterial({ color: "#c9ccd1", metalness: 1, roughness: 0.32, anisotropy: 0.7, anisotropyRotation: 0 })
-      : new THREE.MeshStandardMaterial({ color: "#c9ccd1", metalness: 1, roughness: 0.35 });
+      ? new THREE.MeshPhysicalMaterial({ color: "#c9ccd1", metalness: 1, roughness: 0.28, anisotropy: 0.7, anisotropyRotation: 0 })
+      : new THREE.MeshStandardMaterial({ color: "#c9ccd1", metalness: 1, roughness: 0.32 });
     const lipGeo = new THREE.LatheGeometry(circleProfile(1.25 - 0.09 - 0.012, 0.026), 48);
     const lipMat = new THREE.MeshStandardMaterial({
       color: "#9ED9C9",
-      emissive: "#9ED9C9",
-      emissiveIntensity: 1.2,
+      emissive: "#7CF2D8",
+      emissiveIntensity: 2.2,
       roughness: 0.4,
     });
     this.ring.add(new THREE.Mesh(ringGeo, ringMat), new THREE.Mesh(lipGeo, lipMat));
@@ -226,8 +424,8 @@ export class Molecule {
       const shellGeo = new THREE.SphereGeometry(1, 64, 48);
       this.disposables.push(shellGeo);
       const defs: [number, string, number][] = [
-        [2.4, "#1E9C8F", 0.35],
-        [1.5, "#3F51C9", 0.25],
+        [2.4, "#6FF0DA", 0.55],
+        [1.5, "#9AA6FF", 0.4],
       ];
       for (const [radius, color, alpha] of defs) {
         const mat = new THREE.ShaderMaterial({
@@ -236,6 +434,7 @@ export class Molecule {
           uniforms: { uColor: { value: new THREE.Color(color) }, uAlpha: { value: 0 } },
           transparent: true,
           depthWrite: false,
+          blending: THREE.AdditiveBlending,
         });
         mat.userData.alpha = alpha;
         const mesh = new THREE.Mesh(shellGeo, mat);
@@ -249,21 +448,34 @@ export class Molecule {
       }
     }
 
-    // specimen shadow: the object floats just above the paper
-    const shadowGeo = new THREE.PlaneGeometry(1, 1);
-    this.shadowMat = new THREE.ShaderMaterial({
-      vertexShader: SHADOW_VERT,
-      fragmentShader: SHADOW_FRAG,
-      uniforms: { uOpacity: { value: calm ? 1 : 0 } },
+    // darkfield specimen window behind the molecule (does not lean or spin)
+    const backGeo = new THREE.PlaneGeometry(1, 1);
+    const tint = TINT[0];
+    this.backMat = new THREE.ShaderMaterial({
+      vertexShader: BACK_VERT,
+      fragmentShader: BACK_FRAG,
+      defines: { BOKEH: settings.pulse ? (settings.physical ? 22 : 14) : 8 },
+      uniforms: {
+        uQuad: { value: new THREE.Vector2(1, 1) },
+        uHalf: { value: new THREE.Vector2(2, 4) },
+        uMargin: { value: 0.9 },
+        uCore: { value: tint[0].clone() },
+        uEdge: { value: tint[1].clone() },
+        uLight: { value: TINT_LIGHT[0].clone() },
+        uTime: this.uTime,
+        uOpacity: { value: calm ? 1 : 0 },
+        uScan: { value: 0 },
+        uScanY: { value: 0 },
+      },
       transparent: true,
       depthWrite: false,
     });
-    this.shadow = new THREE.Mesh(shadowGeo, this.shadowMat);
-    this.shadow.position.set(0.35, -0.45, -2.2);
-    this.shadow.renderOrder = -0.5;
-    this.shadow.frustumCulled = false;
-    this.root.add(this.shadow);
-    this.disposables.push(shadowGeo, this.shadowMat);
+    this.back = new THREE.Mesh(backGeo, this.backMat);
+    this.back.position.set(0, 0, -3.2);
+    this.back.renderOrder = -2;
+    this.back.frustumCulled = false;
+    this.root.add(this.back);
+    this.disposables.push(backGeo, this.backMat);
 
     sim.paintStatic(this.spheres, this.rungs, this.tips);
     this.write(false, 0);
@@ -277,6 +489,18 @@ export class Molecule {
     const grow = smooth((sim.intro - 0.35) / 0.65); // the ribbon grows in as the pairs arrive
     this.backbone.update(sim.cur, 0, close, grow);
     this.backbone.update(sim.cur, 1, close, grow);
+    // halos sit at the middle of each rung and fade as the pair unzips
+    const cur = sim.cur;
+    for (let i = 0; i < sim.pairs; i++) {
+      const o = i * 6;
+      this.haloPos[i * 3] = (cur[o] + cur[o + 3]) * 0.5;
+      this.haloPos[i * 3 + 1] = (cur[o + 1] + cur[o + 4]) * 0.5;
+      this.haloPos[i * 3 + 2] = (cur[o + 2] + cur[o + 5]) * 0.5;
+      this.haloGlow[i] = sim.glow[i * 2] * (1 - sim.gap[i] * 0.85);
+    }
+    const g = this.halos.geometry;
+    g.attributes.position.needsUpdate = true;
+    g.attributes.aGlow.needsUpdate = true;
   }
 
   /** One frame. Returns true while something is still moving (the caller then invalidates). */
@@ -296,6 +520,7 @@ export class Molecule {
       sim.time += dt;
       sim.spin += dt * SPIN;
     }
+    this.uTime.value = sim.time;
 
     // drag to rotate, with inertia
     let dragging = false;
@@ -306,14 +531,16 @@ export class Molecule {
       dragging = true;
     }
 
-    // intro: assemble once the canvas is revealed; lights come up with it
+    // intro: assemble once the canvas is revealed; lights come up with it, the slide fades in first
     const ready = document.documentElement.dataset.stage === "ready";
     if (calm) sim.intro = 1;
     else if (ready && sim.intro < 1) sim.intro = Math.min(1, sim.intro + dt / INTRO_S);
     const introRunning = ready && sim.intro < 1;
     const introE = smooth(sim.intro);
     state.scene.environmentIntensity = ENV_MIN + (ENV_MAX - ENV_MIN) * introE;
-    this.shadowMat.uniforms.uOpacity.value = introE;
+    this.backMat.uniforms.uOpacity.value = smooth(sim.intro * 2.5);
+    this.uFlow.value = smooth((sim.intro - 0.4) / 0.6);
+    this.haloMat.uniforms.uOpacity.value = introE;
 
     // live zipper: the split point slides down while the Sequencing chapter scrolls by
     sim.setSplit(calm ? FORK_SPLIT : 0.72 - 0.4 * clamp01((fd - 0.82) / 0.36));
@@ -342,43 +569,82 @@ export class Molecule {
       this.shellMats[i].uniforms.uAlpha.value = w2 * (this.shellMats[i].userData.alpha as number);
     }
 
-    // shadow follows the current form's extent
-    const f4 = Math.min(4, Math.max(0, fd));
-    const seg = Math.min(3, Math.floor(f4));
-    const k = smooth((f4 - seg - 0.18) / 0.64);
-    const a = EXTENT[seg];
-    const b = EXTENT[seg + 1];
-    this.shadow.scale.set((a[0] + (b[0] - a[0]) * k) * 1.5, (a[1] + (b[1] - a[1]) * k) * 1.5, 1);
-
     this.layout(state, fd);
     this.inner.rotation.y = sim.spin;
     this.dolly(state, calm ? 0 : smooth(fd) * (1 - smooth((fd - 1) / 0.6)));
 
+    // halo size: world size -> pixels at unit depth
+    const cam = state.camera as THREE.PerspectiveCamera;
+    const pxPerUnit = (state.size.height * state.viewport.dpr) / (2 * Math.tan(THREE.MathUtils.degToRad(cam.fov) * 0.5));
+    this.haloMat.uniforms.uPx.value = pxPerUnit * 1.15 * this.root.scale.x;
+
+    // read scan on the slide, at the polymerase ring (sequencing chapter)
+    this.backMat.uniforms.uScan.value = smooth(w1);
+    this.backMat.uniforms.uScanY.value = (sim.split - 0.5) * FORK_HEIGHT * Math.cos(this.lean.rotation.z);
+
     return settling || introRunning || dragging || (!calm && scrollState.opacity > 0 && !document.hidden);
   }
 
-  /** Right half on landscape screens; centred (below the hero copy, above the cards) on portrait. */
+  /**
+   * Landscape: the slide and the molecule sit in the right half. Portrait: in the hero the helix lies diagonally
+   * across a wide slide on the hero visual (above the copy), then rises upright above the service cards.
+   * Also sizes and tints the specimen window for the current form.
+   */
   private layout(state: RootState, fd: number) {
     const outer = this.root;
     const vw = state.viewport.width;
     const vh = state.viewport.height;
     const portrait = vw < vh * 0.9 || state.size.width < 900; // matches the CSS breakpoint
-    const hero = clamp01(fd);
+    const k = smooth(clamp01(fd));
+
+    // form blend for the window size and tint
+    const f4 = Math.min(4, Math.max(0, fd));
+    const seg = Math.min(3, Math.floor(f4));
+    const fk = smooth((f4 - seg - 0.18) / 0.64);
+    const a = WINDOW[seg];
+    const b = WINDOW[seg + 1];
+    let hw = a[0] + (b[0] - a[0]) * fk;
+    let hh = a[1] + (b[1] - a[1]) * fk;
+    const u = this.backMat.uniforms;
+    (u.uCore.value as THREE.Color).lerpColors(TINT[seg][0], TINT[seg + 1][0], fk);
+    (u.uEdge.value as THREE.Color).lerpColors(TINT[seg][1], TINT[seg + 1][1], fk);
+    (u.uLight.value as THREE.Color).lerpColors(TINT_LIGHT[seg], TINT_LIGHT[seg + 1], fk);
+
+    let lean = -TILT * clamp01(Math.abs(fd - 2.5) - 0.5); // the strand forms lean; cell and plasmid sit upright
+    let scale: number;
     if (portrait) {
-      // hero: sit on the hero visual (below the copy) and scroll with it; then rise above the service cards
-      const scale = Math.min(0.92, vw / 5.8);
-      const heroScale = Math.min(scale, (0.5 * vh) / 7.2);
-      const screenY = (scrollState.heroY || window.innerHeight * 0.7) - window.scrollY;
+      const upright = Math.min(0.92, vw / 6.4);
+      const boxH = ((scrollState.heroH || window.innerHeight * 0.36) / window.innerHeight) * vh;
+      // hero: the helix lies along the diagonal of the hero visual box
+      const diag = Math.hypot(vw * 0.94, boxH * 0.92);
+      const heroScale = Math.min(0.56, diag / 9.4);
+      const screenY = (scrollState.heroY || window.innerHeight * 0.3) - window.scrollY;
       const heroWorldY = (0.5 - screenY / window.innerHeight) * vh;
-      const k = hero * hero * (3 - 2 * hero);
       outer.position.set(0, heroWorldY + (0.17 * vh - heroWorldY) * k, 0);
-      outer.scale.setScalar(heroScale + (scale - heroScale) * k);
+      scale = heroScale + (upright - heroScale) * k;
+      const angle = Math.PI / 2 - Math.atan2(boxH * 0.92, vw * 0.94);
+      lean = angle * (1 - k) + lean * k;
+      // window: the hero box, then the form's own window (never wider than the screen)
+      const heroHW = (vw * 0.47) / scale;
+      const heroHH = (boxH * 0.47) / scale;
+      hw = Math.min(heroHW + (hw - heroHW) * k, (vw * 0.48) / scale);
+      hh = heroHH + (hh - heroHH) * k;
     } else {
-      outer.position.set(Math.min(vw * 0.25, 4.6), 0, 0);
-      outer.scale.setScalar(Math.min(1.05, vh / 8.6));
+      // a little below centre: the fixed header covers the top of the viewport
+      outer.position.set(Math.min(vw * 0.23, 4.3), -0.035 * vh, 0);
+      scale = Math.min(1.0, vh / 9.0);
+      hh = Math.min(hh, (vh * 0.43) / scale);
     }
-    // the strand forms lean; the cell and the plasmid ring sit upright
-    outer.rotation.z = -TILT * clamp01(Math.abs(fd - 2.5) - 0.5);
+    outer.scale.setScalar(scale);
+    this.lean.rotation.z = lean;
+
+    // the slide sits behind the molecule: grow it by the perspective factor so it reads at the size set here
+    const camZ = state.camera.position.z;
+    const pf = (camZ - this.back.position.z * scale) / camZ;
+    const margin = 0.9;
+    this.back.scale.set((hw * 2 + margin * 2) * pf, (hh * 2 + margin * 2) * pf, 1);
+    (u.uQuad.value as THREE.Vector2).set(hw * 2 + margin * 2, hh * 2 + margin * 2);
+    (u.uHalf.value as THREE.Vector2).set(hw, hh);
   }
 
   /** Dolly zoom: the camera moves in while the fov widens, keeping the molecule plane the same size. */
@@ -399,4 +665,3 @@ export class Molecule {
     this.tips.dispose();
   }
 }
-

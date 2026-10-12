@@ -115,11 +115,11 @@ function plasmid(out: FormBuffers, n: number) {
 
 export function buildForms(pairs: number): FormBuffers[] {
   const forms = [0, 1, 2, 3, 4].map(() => createFormBuffers(pairs));
-  helix(forms[0], pairs, 1.05, 7.2, 3.1, 0);
+  helix(forms[0], pairs, 1.05, 6.5, 2.9, 0);
   fork(forms[1], pairs);
   cell(forms[2], pairs);
   plasmid(forms[3], pairs);
-  helix(forms[4], pairs, 1.3, 7.6, 3.9, Math.PI * 0.5);
+  helix(forms[4], pairs, 1.3, 7.0, 3.7, Math.PI * 0.5);
   return forms;
 }
 
