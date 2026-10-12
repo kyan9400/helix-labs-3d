@@ -14,10 +14,13 @@ export default function Stage() {
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const wrap = useRef<HTMLDivElement>(null);
 
-  // Scroll -> continuous form index f (piecewise linear between the chapter centres)
+  // Scroll -> continuous form index f (piecewise linear between the chapter centres).
+  // The same rAF update also drives the progress bar and the chapter dots (no second scroll listener).
   useEffect(() => {
     let anchors: number[] = [];
     let frame = 0;
+    let maxScroll = 1;
+    let progress: HTMLElement | null = null;
 
     const update = () => {
       frame = 0;
@@ -43,7 +46,9 @@ export default function Stage() {
         el.style.setProperty("--stage-fade", scrollState.opacity.toFixed(3));
         el.style.visibility = scrollState.opacity <= 0 ? "hidden" : "visible";
       }
+      if (progress) progress.style.transform = `scaleX(${Math.min(1, window.scrollY / maxScroll)})`;
       scrollState.onChange?.();
+      scrollState.subscribers.forEach((cb) => cb());
     };
 
     const measure = () => {
@@ -55,6 +60,8 @@ export default function Stage() {
         const r = el.getBoundingClientRect();
         return r.top + window.scrollY + r.height / 2;
       });
+      maxScroll = Math.max(1, document.documentElement.scrollHeight - vh);
+      progress = document.querySelector<HTMLElement>(".progress");
       const visual = document.querySelector<HTMLElement>(".hero__visual");
       if (visual) {
         const r = visual.getBoundingClientRect();
@@ -80,10 +87,18 @@ export default function Stage() {
     };
   }, []);
 
-  // Decide the quality tier (and whether WebGL exists) only once the page has loaded and gone idle
+  // Once the page has loaded and gone idle: start the deferred effects, then decide the quality tier
+  // (and whether WebGL exists)
   useEffect(() => {
     let alive = true;
+    let stopFx: (() => void) | null = null;
     const cancel = afterLoadIdle(() => {
+      // chapter dots + pointer effects (magnetic buttons, cursor ring): never on the first-load path
+      import("./fx")
+        .then((m) => {
+          if (alive) stopFx = m.startDeferredFx();
+        })
+        .catch(() => undefined);
       const t = detectTier();
       if (!t) {
         document.documentElement.dataset.stage = "fallback"; // no WebGL or a software renderer: keep the poster
@@ -100,6 +115,7 @@ export default function Stage() {
     return () => {
       alive = false;
       cancel();
+      stopFx?.();
     };
   }, []);
 

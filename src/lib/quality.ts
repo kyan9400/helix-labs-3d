@@ -9,21 +9,7 @@
 
 export type Tier = "low" | "medium" | "high";
 
-export interface TierSettings {
-  pairs: number;
-  particles: number;
-  dprCap: number;
-  antialias: boolean;
-  physical: boolean;
-  segments: number;
-  pulse: boolean;
-}
-
-export const TIERS: Record<Tier, TierSettings> = {
-  high: { pairs: 64, particles: 1400, dprCap: 2, antialias: true, physical: true, segments: 24, pulse: true },
-  medium: { pairs: 52, particles: 700, dprCap: 1.5, antialias: true, physical: false, segments: 16, pulse: true },
-  low: { pairs: 36, particles: 260, dprCap: 1, antialias: false, physical: false, segments: 10, pulse: false },
-};
+// The per-tier settings table lives in lib/tiers.ts: only the lazy 3D chunk needs it.
 
 function isTier(value: string | null): value is Tier {
   return value === "low" || value === "medium" || value === "high";

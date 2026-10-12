@@ -130,7 +130,7 @@ main:focus {
 
 .wrap {
   width: 100%;
-  max-width: 1200px;
+  max-width: 1320px;
   margin-inline: auto;
   padding-inline: var(--gutter);
 }
@@ -141,10 +141,39 @@ main:focus {
 .display {
   font-family: var(--font-display);
   font-weight: 400;
-  font-size: clamp(2.6rem, 7vw, 6rem);
-  line-height: 0.98;
-  letter-spacing: -0.02em;
+  font-size: clamp(2.9rem, 8vw, 7.25rem);
+  line-height: 0.93;
+  letter-spacing: -0.028em;
   text-wrap: balance;
+  hyphens: manual;
+}
+/* "born with." stays on one line and gets a coral underline (drawn in on full motion; text never hides) */
+.display em {
+  position: relative;
+  display: inline-block;
+  white-space: nowrap;
+  padding-right: 0.06em;
+}
+.display em::after {
+  content: "";
+  position: absolute;
+  left: 0.02em;
+  right: 0.08em;
+  bottom: 0.02em;
+  height: 2px;
+  background: var(--color-coral);
+  transform-origin: left;
+}
+html.js[data-motion="full"] .display em::after {
+  animation: draw-line 900ms var(--ease-out) 400ms both;
+}
+@keyframes draw-line {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
 }
 .display em,
 .h2 em {
@@ -568,6 +597,7 @@ main,
 }
 .hero__stats dd {
   font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   font-size: clamp(1.25rem, 2.6vw, 1.75rem);
   font-weight: 500;
   letter-spacing: -0.02em;
@@ -604,7 +634,7 @@ html[data-stage="ready"] .hero__poster {
   text-transform: uppercase;
   color: var(--color-ink-2);
   background: var(--color-paper);
-  padding: 2px 8px;
+  padding: var(--space-1) var(--space-2);
   border: 1px solid var(--color-rule);
   border-radius: var(--radius-tag);
   transition: opacity 0.6s;
@@ -636,7 +666,14 @@ html[data-motion="full"] .stage-status__loading {
 
 @media (min-width: 900px) and (min-aspect-ratio: 9/10) {
   .hero__grid {
-    grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
+  }
+  .hero__copy {
+    max-width: none;
+  }
+  /* the headline overhangs into the visual column, so the molecule sits behind the end of "born with." */
+  .hero__copy .display {
+    margin-right: -12%;
   }
   .hero__visual {
     min-height: 70svh;
@@ -730,7 +767,7 @@ html[data-motion="full"] .stage-status__loading {
   left: -1px;
   top: var(--space-6);
   width: 4px;
-  height: 48px;
+  height: 72px;
   border-radius: 0 4px 4px 0;
   background: var(--chapter-accent, var(--color-teal));
 }
@@ -813,7 +850,7 @@ html[data-motion="full"] .stage-status__loading {
   padding-top: var(--space-3);
   border-top: 1px dashed var(--color-rule);
   font-family: var(--font-mono);
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   letter-spacing: 0.04em;
   line-height: 1.5;
   text-transform: uppercase;
@@ -840,8 +877,21 @@ html[data-motion="full"] .stage-status__loading {
 .process,
 .lab,
 .team,
-.faq {
+.faq,
+.booking {
   padding-block: var(--space-9);
+}
+@media (min-width: 900px) {
+  .process,
+  .lab,
+  .team,
+  .faq,
+  .booking {
+    padding-block: var(--space-10);
+  }
+  .services__intro {
+    padding-top: var(--space-10);
+  }
 }
 .lab,
 .faq {
@@ -849,7 +899,7 @@ html[data-motion="full"] .stage-status__loading {
 }
 .section-head {
   max-width: 40rem;
-  margin-bottom: var(--space-7);
+  margin-bottom: var(--space-8);
 }
 
 /* Process */
@@ -919,6 +969,7 @@ html[data-motion="full"] .stage-status__loading {
 }
 .numbers__item dd {
   font-family: var(--font-display);
+  font-variant-numeric: tabular-nums;
   font-size: clamp(1.875rem, 5vw, 4rem);
   line-height: 1;
   letter-spacing: -0.02em;
@@ -1036,7 +1087,6 @@ html[data-motion="full"] .stage-status__loading {
 .booking {
   background: var(--color-ink);
   color: var(--color-paper);
-  padding-block: var(--space-9);
 }
 .booking :focus-visible {
   outline-color: var(--color-amber);
@@ -1068,7 +1118,7 @@ html[data-motion="full"] .stage-status__loading {
   color: var(--color-mint);
 }
 .booking__facts dd {
-  margin-top: 2px;
+  margin-top: var(--space-1);
 }
 .booking__panel {
   background: var(--color-ink-panel);
@@ -1408,7 +1458,7 @@ html[data-motion="full"] .stage-status__loading {
 }
 .site-footer a:not(.brand) {
   display: inline-block;
-  padding-block: 10px;
+  padding-block: var(--space-3);
   color: var(--color-ink);
   font-weight: 600;
   text-underline-offset: 3px;
@@ -1424,6 +1474,264 @@ html[data-motion="full"] .stage-status__loading {
   font-family: var(--font-mono);
   font-size: 0.75rem;
   letter-spacing: 0.04em;
+}
+
+/* ==========================================================================
+   Scroll progress, chapter dots, sequence ruler
+   ========================================================================== */
+/* 2 px bar under the header; Stage writes scaleX(p) from its scroll update */
+.progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  background: var(--color-teal);
+  transform: scaleX(0);
+  transform-origin: left;
+  pointer-events: none;
+}
+
+.chapter-dots {
+  display: none;
+}
+@media (min-width: 900px) {
+  .chapter-dots {
+    display: block;
+    position: fixed;
+    right: calc(var(--gutter) - 12px);
+    top: 50%;
+    z-index: 15;
+    transform: translateY(-50%);
+    opacity: 0;
+    visibility: hidden;
+    transition:
+      opacity 0.4s var(--ease-out),
+      visibility 0s linear 0.4s;
+  }
+  .chapter-dots[data-visible] {
+    opacity: 1;
+    visibility: visible;
+    transition:
+      opacity 0.4s var(--ease-out),
+      visibility 0s;
+  }
+}
+.chapter-dots ol {
+  list-style: none;
+}
+.chapter-dots a {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  min-width: 44px;
+  min-height: 44px;
+  padding-right: var(--space-3);
+  text-decoration: none;
+  color: var(--color-ink-2);
+}
+.chapter-dots__label {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  background: var(--color-paper);
+  padding: 0 var(--space-1);
+  opacity: 0;
+  transform: translateX(4px);
+  transition:
+    opacity 0.2s var(--ease-out),
+    transform 0.2s var(--ease-out);
+}
+.chapter-dots a:hover .chapter-dots__label,
+.chapter-dots a:focus-visible .chapter-dots__label {
+  opacity: 1;
+  transform: none;
+}
+.chapter-dots__dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border: 1.5px solid var(--color-ink-2);
+  border-radius: 50%;
+  transition:
+    transform 0.3s var(--ease-out),
+    background-color 0.3s,
+    border-color 0.3s;
+}
+.chapter-dots a[aria-current="true"] {
+  color: var(--color-ink);
+}
+.chapter-dots a[aria-current="true"] .chapter-dots__dot {
+  background: var(--color-teal);
+  border-color: var(--color-teal);
+  transform: scale(1.5);
+}
+
+/* thin column of base letters beside the hero molecule (decor) */
+.seq-ruler {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  height: min(100%, 576px);
+  width: auto;
+  transform: translateY(-50%);
+  overflow: visible;
+  /* fades via fill/stroke opacity, not element opacity: contrast checkers read CSS color x opacity,
+     and this column is decoration (aria-hidden), not text to read */
+  color: var(--color-ink);
+}
+.seq-ruler text {
+  font-family: var(--font-mono);
+  font-size: 11px; /* 0.6875rem at the ruler's natural size */
+  font-weight: 500;
+  fill-opacity: 0.55;
+}
+.seq-ruler__rule,
+.seq-ruler__tick {
+  stroke: var(--color-ink-2);
+  stroke-width: 1;
+  stroke-opacity: 0.55;
+}
+.seq-ruler__rule {
+  stroke-opacity: 0.22;
+}
+
+/* desktop: the hero molecule can be dragged once the 3D is live */
+@media (min-width: 900px) and (pointer: fine) {
+  html[data-stage="ready"] .hero__visual {
+    pointer-events: auto;
+    touch-action: pan-y;
+    cursor: grab;
+  }
+  html[data-stage="ready"] .hero__visual[data-dragging] {
+    cursor: grabbing;
+  }
+}
+
+/* ==========================================================================
+   Motion polish: split headings, chapter numerals, magnetic buttons, cursor, intro pulse
+   ========================================================================== */
+.split .w {
+  display: inline-block;
+  overflow: clip;
+  vertical-align: top;
+  padding: 0 0.06em 0.12em 0;
+  margin: 0 -0.06em -0.12em 0;
+}
+.split .w > span {
+  display: inline-block;
+}
+html.js[data-motion="full"] .split .w > span {
+  transform: translateY(105%);
+  transition: transform 900ms var(--ease-out);
+  transition-delay: calc(var(--i, 0) * 45ms);
+}
+html.js[data-motion="full"] .is-in .split .w > span {
+  transform: none;
+}
+
+.chapter__numeral {
+  position: absolute;
+  left: var(--space-4);
+  bottom: calc(100% - 0.18em);
+  font-family: var(--font-mono);
+  font-size: clamp(6rem, 12vw, 11rem);
+  font-weight: 400;
+  line-height: 0.8;
+  letter-spacing: -0.04em;
+  pointer-events: none;
+  user-select: none;
+}
+.chapter__numeral::before {
+  content: attr(data-n);
+  color: transparent;
+  -webkit-text-stroke: 1px var(--color-rule);
+}
+html.js[data-motion="full"] .chapter__card[data-reveal]:not(.is-in) {
+  transform: translateY(28px) scale(0.97);
+}
+
+.btn__label {
+  display: inline-block;
+  transition: transform 0.25s var(--ease-out);
+}
+
+.site-header__cta {
+  position: relative;
+}
+.site-header__cta::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border: 2px solid var(--color-teal);
+  border-radius: inherit;
+  opacity: 0;
+  pointer-events: none;
+}
+html.js[data-motion="full"][data-stage="ready"] .site-header__cta::after {
+  animation: cta-pulse 600ms var(--ease-out) 1;
+}
+@keyframes cta-pulse {
+  from {
+    opacity: 0.7;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.35);
+  }
+}
+
+.cursor {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 60;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.cursor[data-on] {
+  opacity: 1;
+}
+.cursor__ring {
+  display: block;
+  width: 28px;
+  height: 28px;
+  margin: -14px 0 0 -14px;
+  border: 1px solid rgb(16 32 31 / 0.5);
+  border-radius: 50%;
+  transition:
+    transform 0.3s var(--ease-out),
+    background-color 0.3s;
+}
+.cursor[data-hot] .cursor__ring {
+  transform: scale(2);
+  background: rgb(30 156 143 / 0.12);
+}
+
+/* lab numbers: hairline column dividers grow in */
+.numbers__item {
+  position: relative;
+}
+html.js[data-motion="full"] .numbers__item {
+  border-right-color: transparent;
+}
+html.js[data-motion="full"] .numbers__item::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: -1px;
+  bottom: -1px;
+  width: 1px;
+  background: var(--color-rule);
+  transform: scaleY(0);
+  transform-origin: top;
+  transition: transform 1s var(--ease-out) 0.15s;
+}
+html.js[data-motion="full"] .numbers__item.is-in::after {
+  transform: none;
 }
 
 /* ==========================================================================

@@ -1,11 +1,31 @@
 import AppointmentForm from "@/components/AppointmentForm";
+import ChapterDots from "@/components/ChapterDots";
 import HelixPoster from "@/components/HelixPoster";
 import LogoMark from "@/components/Logo";
 import MobileNav from "@/components/MobileNav";
 import MotionToggle from "@/components/MotionToggle";
 import Portrait from "@/components/Portrait";
 import Reveals from "@/components/Reveals";
+import SequenceRuler from "@/components/SequenceRuler";
+import SplitHeading from "@/components/SplitHeading";
 import Stage from "@/components/Stage";
+
+const SITE_URL = "https://helix-labs-3d.vercel.app";
+
+// Structured data: a website and the (fictional) organisation behind it. Deliberately not MedicalClinic.
+const JSON_LD = {
+  "@context": "https://schema.org",
+  "@graph": [
+    { "@type": "WebSite", "@id": `${SITE_URL}/#website`, name: "Helix Labs", url: SITE_URL },
+    {
+      "@type": "Organization",
+      "@id": `${SITE_URL}/#org`,
+      name: "Helix Labs",
+      url: SITE_URL,
+      description: "Concept project — fictional brand.",
+    },
+  ],
+};
 
 const NAV = [
   { href: "#services", label: "Services" },
@@ -147,6 +167,7 @@ const FAQ = [
 export default function Home() {
   return (
     <>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(JSON_LD) }} />
       <a className="skip-link" href="#main">
         Skip to content
       </a>
@@ -168,14 +189,16 @@ export default function Home() {
           </nav>
           <div className="site-header__actions">
             <a className="btn btn--primary btn--small site-header__cta" href="#book">
-              Book a visit
+              <span className="btn__label">Book a visit</span>
             </a>
             <MobileNav items={NAV} />
           </div>
         </div>
+        <div className="progress" aria-hidden="true" />
       </header>
 
       <Stage />
+      <ChapterDots />
 
       <main id="main" tabIndex={-1}>
         {/* ---------------------------------------------------------------- Hero */}
@@ -192,7 +215,7 @@ export default function Home() {
               </p>
               <div className="hero__ctas">
                 <a className="btn btn--primary" href="#book">
-                  Book a consultation
+                  <span className="btn__label">Book a consultation</span>
                 </a>
                 <a className="btn btn--line" href="#services">
                   Explore services
@@ -216,6 +239,7 @@ export default function Home() {
             </div>
             <div className="hero__visual" aria-hidden="true">
               <HelixPoster className="hero__poster" />
+              <SequenceRuler />
               <p className="stage-status">
                 <span className="stage-status__loading">Sequencing…</span>
                 <span className="stage-status__static">Static view</span>
@@ -232,9 +256,7 @@ export default function Home() {
         <section id="services" className="services" aria-labelledby="services-title">
           <div className="wrap services__intro" data-reveal>
             <p className="tag">HX—01 · Services</p>
-            <h2 id="services-title" className="h2">
-              Four services, <em>one strand.</em>
-            </h2>
+            <SplitHeading id="services-title" lead="Four services," em="one strand." />
             <p className="lead">Scroll, and the helix unwinds into each one.</p>
           </div>
 
@@ -248,6 +270,8 @@ export default function Home() {
             >
               <div className="wrap">
                 <div className={`chapter__card chapter__card--${s.accent}`} data-reveal>
+                  {/* outlined numeral drawn from data-n by CSS (decoration, not read out) */}
+                  <span className="chapter__numeral" data-n={String(i + 1).padStart(2, "0")} aria-hidden="true" />
                   <p className="chapter__index">
                     <span>{String(i + 1).padStart(2, "0")}</span> / 04
                   </p>
@@ -281,9 +305,7 @@ export default function Home() {
           <div className="wrap">
             <div className="section-head" data-reveal>
               <p className="tag">HX—02 · Process</p>
-              <h2 id="process-title" className="h2">
-                How a visit <em>works.</em>
-              </h2>
+              <SplitHeading id="process-title" lead="How a visit" em="works." />
             </div>
             <ol className="steps">
               {STEPS.map((step, i) => (
@@ -303,9 +325,7 @@ export default function Home() {
           <div className="wrap">
             <div className="section-head" data-reveal>
               <p className="tag">HX—03 · The lab</p>
-              <h2 id="lab-title" className="h2">
-                A lab you can <em>ask questions.</em>
-              </h2>
+              <SplitHeading id="lab-title" lead="A lab you can" em="ask questions." />
             </div>
             <dl className="numbers">
               {NUMBERS.map((n) => (
@@ -346,9 +366,7 @@ export default function Home() {
           <div className="wrap">
             <div className="section-head" data-reveal>
               <p className="tag">HX—04 · Clinicians</p>
-              <h2 id="team-title" className="h2">
-                The people who <em>read your results.</em>
-              </h2>
+              <SplitHeading id="team-title" lead="The people who" em="read your results." />
             </div>
             <ul className="people">
               {TEAM.map((p, i) => (
@@ -366,11 +384,9 @@ export default function Home() {
         {/* ---------------------------------------------------------------- Book */}
         <section id="book" className="booking" aria-labelledby="book-title">
           <div className="wrap booking__grid">
-            <div className="booking__aside">
+            <div className="booking__aside" data-reveal>
               <p className="tag tag--on-ink">HX—05 · Appointments</p>
-              <h2 id="book-title" className="h2">
-                Book a <em>consultation.</em>
-              </h2>
+              <SplitHeading id="book-title" lead="Book a" em="consultation." />
               <p className="lead">
                 Tell us a little about what you&rsquo;re looking for. A coordinator replies within one working day to confirm
                 a time.
@@ -401,9 +417,7 @@ export default function Home() {
           <div className="wrap faq__grid">
             <div className="section-head" data-reveal>
               <p className="tag">HX—06 · FAQ</p>
-              <h2 id="faq-title" className="h2">
-                Questions, <em>answered.</em>
-              </h2>
+              <SplitHeading id="faq-title" lead="Questions," em="answered." />
             </div>
             <div className="faq__list">
               {FAQ.map((item) => (

@@ -13,24 +13,29 @@ const display = Instrument_Serif({
 
 const sans = Manrope({ subsets: ["latin"], variable: "--font-manrope", display: "swap" });
 
-const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jetbrains", display: "swap" });
+// mono is never part of the first paint (LCP), so it is not preloaded
+const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jetbrains", display: "swap", preload: false });
 
 const title = "Helix Labs — Genomic medicine, explained in person";
 const description =
   "Whole-genome sequencing, cell therapy, precision diagnostics and a longevity programme — interpreted by a clinician who sits down with you. Book a consultation.";
 
+// Vercel is the canonical site; the GitHub Pages mirror only changes where share images resolve
+const siteUrl = "https://helix-labs-3d.vercel.app";
+const assetBase = process.env.GH_PAGES === "1" ? "https://kyan9400.github.io" : siteUrl;
+
 export const metadata: Metadata = {
-  metadataBase: new URL("https://helix-labs-3d.vercel.app"),
+  metadataBase: new URL(assetBase),
   title: { default: title, template: "%s · Helix Labs" },
   description,
   applicationName: "Helix Labs",
   authors: [{ name: "Alhassan Alfarran", url: "https://alhassan-portfolio-sigma.vercel.app" }],
   creator: "Alhassan Alfarran",
   keywords: ["genome sequencing", "genomic medicine", "cell therapy", "precision diagnostics", "longevity", "clinic"],
-  alternates: { canonical: "/" },
+  alternates: { canonical: `${siteUrl}/` },
   openGraph: {
     type: "website",
-    url: "/",
+    url: `${siteUrl}/`,
     siteName: "Helix Labs",
     title,
     description,
@@ -44,6 +49,7 @@ export const viewport: Viewport = {
   themeColor: "#F4F1EA",
   width: "device-width",
   initialScale: 1,
+  colorScheme: "light",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

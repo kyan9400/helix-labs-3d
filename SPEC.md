@@ -34,24 +34,40 @@ almost entirely from the four nucleotide bases.
 
 ## 4. Signature 3D moment — "The unwinding"
 
-**Technique.** One `<Canvas>` fixed behind the hero and services. 64 base pairs are drawn with **three InstancedMeshes**
-(nucleotide spheres ×128, half-rungs ×128, backbone links ×126) = 3 draw calls for the whole molecule. Every pair has a
-target position in five *forms*, computed procedurally on the CPU into reused `Float32Array`s:
+**Technique.** One `<Canvas>` fixed behind the hero and services. 64 base pairs are drawn as **2 continuous backbone
+tubes** (one `BufferGeometry` per strand, rebuilt in place: centripetal Catmull-Rom, parallel-transport frames, analytic
+normals, rounded caps, a closure span that seals the plasmid ring), **phosphate beads** ×128, **open half-rungs** ×128 and
+their **rounded tips** ×128 (instanced). Every pair has a target position in five *forms*, computed procedurally on the
+CPU into reused `Float32Array`s:
 
 | f | form | what it says |
 |---|---|---|
 | 0 | double helix, 0.75π groove offset, slow spin | hero — "your code" |
-| 1 | replication fork: untwisted ladder that splits into a Y, rungs unzipped | Genome sequencing — reading |
-| 2 | cell: pairs on a Fibonacci sphere, strand A = membrane, strand B = nucleus shell | Cell therapy |
-| 3 | plasmid: a closed ring with the two strands twisted around it | Precision diagnostics |
+| 1 | replication fork: untwisted ladder that splits into a Y; the split point slides down as you scroll (live zipper) and a brushed-metal polymerase ring clamps on at it, lighting the bases it reads | Genome sequencing — reading |
+| 2 | cell: pairs on a Fibonacci sphere, strand A = membrane, strand B = nucleus; fresnel membrane + nucleus shells | Cell therapy |
+| 3 | plasmid: a closed ring with the two strands twisted around it; the backbone tubes close seamlessly | Precision diagnostics |
 | 4 | wider, tighter helix — re-zipped | Longevity programme — renewal |
 
 Scroll position is mapped to a continuous `f ∈ [0,4]` (piecewise-linear between chapter centres, native scroll, no
 smoothing library). Between forms each pair blends with a per-index stagger, so the change travels *along* the strand
 (it visibly unwinds rather than cross-fading). A held plateau (smoothstep 0.18→0.82) keeps each form still while you
-read. A "read head" pulse travels along the strand. Around it, a **cell particle field**: `THREE.Points` with a custom
-shader that draws each particle as a soft cell (membrane ring + nucleus) and drifts in the vertex shader (no CPU work).
-Lighting: RoomEnvironment PMREM (generated in code, no HDRI download) + key/rim lights; MeshPhysical clearcoat on high.
+read. A "read head" pulse travels along the strand as an emissive glow on the bases (`aGlow` instance attribute). Around
+it, a **cell particle field**: `THREE.Points` with a custom shader that draws each particle as a soft cell (membrane ring
++ nucleus) and drifts in the vertex shader (no CPU work).
+
+**The read (signature moment).** From the hero into Sequencing the camera does a **dolly zoom** (z 12 → 8.7 while fov
+35° → 47°, `z·tan(fov/2)` constant, so the molecule keeps its size and the cell field stretches), the fork unzips live
+with scroll, and the polymerase ring sweeps light along the bases. **Intro:** once the canvas is revealed, the pairs fly
+in from the cell field and assemble while the studio lights come up (environment intensity 0.15 → 0.9 over 1.8 s).
+**Drag to rotate** with inertia on the desktop hero.
+
+**Look.** Studio lighting built in code and baked once with PMREM (dark warm room, overhead softbox, tall right strip,
+warm kicker, paper floor bounce) + one key light; ACES Filmic, exposure 1.08. Backbone: clearcoat lacquer with a thin
+iridescent film on high; bases: soft ceramic (clearcoat + sheen); beads: clearcoat. A shader **specimen shadow** (soft
+ink ellipse behind the molecule, sized per form) grounds it on the paper.
+
+**Draw calls:** 2 tubes + beads + rungs + tips + ring ×2 + shells ×2 + shadow + particles = **11 on high and medium**,
+**9 on low** (no shells), and the ring (2) is skipped outside the Sequencing chapter, so usually 9 / 7.
 
 **Render on demand.** `frameloop="demand"`. A loop runs only while something animates: the morph is settling, or
 autonomous motion is allowed (full motion, tab visible, scene on screen). Past the services section the canvas fades and
@@ -59,15 +75,16 @@ stops rendering completely.
 
 **Quality tiers** (decided before the Canvas is created, from a throwaway WebGL probe):
 
-| tier | who | pairs | particles | DPR cap | extras |
-|---|---|---|---|---|---|
-| high | discrete GPU, non-touch | 64 | 1400 | 2 | MSAA, clearcoat physical material, 24-seg spheres |
-| medium | Intel/AMD iGPU, Mali/Adreno/PowerVR, touch | 52 | 700 | 1.5 | MSAA, standard material, 16-seg |
-| low | ≤2 cores, ≤2 GB, Save-Data | 36 | 260 | 1 | no MSAA, 10-seg, no read-head pulse |
+| tier | who | pairs | particles | DPR cap | tube steps / radial | extras |
+|---|---|---|---|---|---|---|
+| high | discrete GPU, non-touch | 64 | 1400 | 2 | 6 / 14 | MSAA, physical materials, iridescent lacquer, anisotropic ring, cell shells, 24-seg beads |
+| medium | Intel/AMD iGPU, Mali/Adreno/PowerVR, touch | 52 | 700 | 1.5 | 4 / 10 | MSAA, standard materials, cell shells, 16-seg |
+| low | ≤2 cores, ≤2 GB, Save-Data | 36 | 260 | 1 | 3 / 6 | no MSAA, 10-seg, no shells, no read-head pulse |
 
 Software renderers (SwiftShader, llvmpipe, softpipe, Microsoft Basic Render, Mesa offscreen, or a context that fails
 `failIfMajorPerformanceCaveat`) get no 3D at all: the poster stays and the 3D chunk is never downloaded.
-`?quality=low|medium|high` overrides (and forces the 3D on). drei `<PerformanceMonitor>` drops DPR on decline (floor 0.75) and raises it back.
+`?quality=low|medium|high` overrides (and forces the 3D on). A small local adaptive-DPR loop (`AdaptiveDpr.tsx`, 1 s
+windows) drops DPR by 0.25 below 45 fps (floor 0.75), raises it above 58 fps, and locks at 0.75 after 3 flip-flops.
 
 **Reduced motion.** Respects `prefers-reduced-motion` by default; a "Turn on full motion" toggle (hero + footer) stores
 the choice in `localStorage` (`helix-motion`), `?motion=full|reduced` overrides. Reduced = no spin, no particle drift,
@@ -178,14 +195,14 @@ diagnostic panels. We call you when they're ready — results are never just ema
 | DNA helix, forms, particles | procedural code (`src/components/three/`) | own work |
 | Hero poster, favicon, OG image, avatars, 404 art | SVG / `next/og` drawn in code | own work |
 | Instrument Serif, Manrope, JetBrains Mono | Google Fonts via `next/font` | SIL OFL 1.1 |
-| Environment lighting | `three/examples` RoomEnvironment (generated) | MIT (three.js) |
+| Environment lighting | studio scene in code (`studioEnv.ts`), baked with PMREM | own work |
 
 Zero downloaded images, models, HDRIs or audio.
 
 ## 8. Performance budget
 
 - First-load JS for `/` < 250 KB gzip (target < 160 KB) excluding the lazy 3D chunk; 3D chunk loaded after idle.
-- 3 draw calls for the molecule + 1 for particles; no shadows, no post-processing.
+- About 11 draw calls on high, 9 on low (see §4); no shadow maps, no post-processing.
 - No per-frame allocations, no React state per frame; morph math in preallocated typed arrays.
 - LCP = hero h1 / lead (server-rendered text, no JS reveal, fonts `display: swap`); CLS ≈ 0 (canvas is fixed, poster sized).
 - Lighthouse mobile targets: Performance ≥ 85, Accessibility/Best Practices/SEO ≥ 95.

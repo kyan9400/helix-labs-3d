@@ -34,13 +34,20 @@ function helix(out: FormBuffers, n: number, radius: number, height: number, turn
   }
 }
 
-/** Replication fork: an untwisted ladder whose top half splits into a Y with the rungs unzipped. */
-function fork(out: FormBuffers, n: number) {
-  const height = 7.4;
+export const FORK_HEIGHT = 7.4;
+export const FORK_SPLIT = 0.46;
+
+/**
+ * Replication fork: an untwisted ladder whose top part splits into a Y with the rungs unzipped.
+ * `t0` is the split point along the strand (0..1); scrolling slides it down to unzip the strand live.
+ */
+export function fork(out: FormBuffers, n: number, t0 = FORK_SPLIT) {
+  const height = FORK_HEIGHT;
   const half = 0.85;
+  const span = Math.max(0.05, 1 - t0);
   for (let i = 0; i < n; i++) {
     const t = i / (n - 1);
-    const d = Math.max(0, t - 0.46) / 0.54; // 0 below the fork, 1 at the top
+    const d = Math.max(0, t - t0) / span; // 0 below the fork, 1 at the top
     const spread = d * d * 2.1;
     const ripple = Math.sin(t * TAU * 1.5) * 0.28;
     const y = (t - 0.5) * height;
@@ -116,17 +123,5 @@ export function buildForms(pairs: number): FormBuffers[] {
   return forms;
 }
 
-/** Deterministic base sequence (so every visit shows the same "genome"). 0=A 1=T 2=G 3=C for strand A. */
-export function buildSequence(pairs: number): Uint8Array {
-  const seq = new Uint8Array(pairs);
-  let seed = 0x9e3779b9;
-  for (let i = 0; i < pairs; i++) {
-    seed ^= seed << 13;
-    seed ^= seed >>> 17;
-    seed ^= seed << 5;
-    seq[i] = (seed >>> 0) % 4;
-  }
-  return seq;
-}
-
-export const COMPLEMENT = [1, 0, 3, 2];
+// the sequence lives in lib/sequence.ts so the 2D ruler can share it
+export { buildSequence, COMPLEMENT } from "@/lib/sequence";
