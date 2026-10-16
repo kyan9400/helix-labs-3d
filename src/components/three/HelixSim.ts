@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { buildForms, buildSequence, COMPLEMENT, fork, FORK_SPLIT, type FormBuffers } from "./forms";
+import type { DnaModel } from "./dna";
 import { BASE_COLORS } from "@/lib/sequence";
 
 /*
@@ -54,6 +55,18 @@ export class HelixSim {
 
   /** blended unzip gap per pair */
   readonly gap: Float32Array;
+  /**
+   * How much of pair i is shown as real atoms (1 in the helix forms, staggered along the strand as it unwinds).
+   * The stylised beads and rungs shrink by the same amount, so the real molecule and the diagram hand over.
+   */
+  readonly real: Float32Array;
+  /** true when forms 0 and 4 come from the real structure */
+  readonly hasReal: boolean;
+  /** current blend segment and its eased progress (the atoms' shader repeats the per-pair stagger from these) */
+  seg = 0;
+  e = 0;
+  /** travelling read head (0..1 along the strand, runs past both ends) */
+  head = 0;
   private scatter: Float32Array;
   private m = new THREE.Matrix4();
   private q = new THREE.Quaternion();
@@ -66,12 +79,14 @@ export class HelixSim {
   private col = new THREE.Color();
   private strandColors = BEAD_COLORS.map((h) => new THREE.Color(h));
 
-  constructor(pairs: number) {
+  constructor(pairs: number, dna: DnaModel | null = null) {
     this.pairs = pairs;
-    this.forms = buildForms(pairs);
+    this.forms = buildForms(pairs, dna);
+    this.hasReal = !!dna;
     this.seq = buildSequence(pairs);
     this.cur = new Float32Array(pairs * 6);
     this.gap = new Float32Array(pairs);
+    this.real = new Float32Array(pairs);
     this.glow = new Float32Array(pairs * 2);
     this.scatter = new Float32Array(pairs * 6);
     // seeded start points for the intro: inside a radius-5 shell, biased back in z (out of the cell field)
@@ -136,6 +151,10 @@ export class HelixSim {
     const a = this.forms[seg];
     const b = this.forms[seg + 1];
     const intro = this.intro;
+    this.seg = seg;
+    this.e = e;
+    // real atoms: leaving the helix (segment 0) they dissolve, arriving at the helix again (segment 3) they form
+    const realDir = !this.hasReal ? 0 : seg === 0 ? -1 : seg === 3 ? 1 : 0;
     for (let i = 0; i < n; i++) {
       const t = i / (n - 1);
       // stagger along the strand, so the change travels like an unwinding instead of a cross-fade
@@ -144,11 +163,15 @@ export class HelixSim {
       const o = i * 6;
       for (let j = 0; j < 6; j++) this.cur[o + j] = a.pos[o + j] + (b.pos[o + j] - a.pos[o + j]) * k;
       this.gap[i] = a.gap[i] + (b.gap[i] - a.gap[i]) * k;
+      let real = realDir < 0 ? 1 - k : realDir > 0 ? k : 0;
       if (intro < 1) {
-        // each pair flies in from its scattered start, staggered along the strand
+        // each pair flies in from its scattered start, staggered along the strand, as a bead pair that turns into
+        // real atoms when it lands
         const f = smootherstep(intro * 1.6 - t * 0.6);
         for (let j = 0; j < 6; j++) this.cur[o + j] = this.scatter[o + j] + (this.cur[o + j] - this.scatter[o + j]) * f;
+        real *= f;
       }
+      this.real[i] = real;
     }
   }
 
@@ -169,6 +192,7 @@ export class HelixSim {
     this.blend();
     const n = this.pairs;
     const head = ((this.time * 0.2) % 1.4) - 0.2;
+    this.head = head;
     const at = this.split * (n - 1);
     const cur = this.cur;
     const glow = this.glow;
@@ -188,7 +212,8 @@ export class HelixSim {
       glow[i * 2] = g;
       glow[i * 2 + 1] = g;
 
-      const r = SPHERE_R * (1 + 0.3 * boost);
+      const show = 1 - this.real[i];
+      const r = SPHERE_R * (1 + 0.3 * boost) * show;
       this.s.set(r, r, r);
       this.m.compose(this.pa, this.qIdentity, this.s);
       spheres.setMatrixAt(i * 2, this.m);
@@ -201,7 +226,7 @@ export class HelixSim {
       if (len > 1e-5) this.v.divideScalar(len);
       else this.v.set(1, 0, 0);
       const halfLen = len * (0.5 - this.gap[i] * 0.5);
-      const rr = RUNG_R * (1 + 0.35 * boost);
+      const rr = RUNG_R * (1 + 0.35 * boost) * show;
       this.cylinder(rungs, i * 2, this.pa, this.v, halfLen, rr);
       this.s.set(rr, rr, rr);
       this.c.copy(this.pa).addScaledVector(this.v, halfLen);

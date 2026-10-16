@@ -1,3 +1,5 @@
+import type { DnaModel } from "./dna";
+
 /*
  * The five shapes the molecule takes. Each form writes, for every base pair i:
  *   strand A position, strand B position (6 floats) and the "unzip" gap between the two half-rungs.
@@ -113,13 +115,46 @@ function plasmid(out: FormBuffers, n: number) {
   }
 }
 
-export function buildForms(pairs: number): FormBuffers[] {
+/**
+ * Real helix: the phosphorus path of each strand of PDB 1BNA (stacked along its axis), resampled to `n` pairs.
+ * Interpolates in cylindrical coordinates, so the in-between points stay on the helix and the backbone tube passes
+ * through the real phosphorus atoms.
+ */
+function realHelix(out: FormBuffers, n: number, dna: DnaModel) {
+  const last = dna.bp - 1;
+  for (let i = 0; i < n; i++) {
+    const u = (i / (n - 1)) * last;
+    const j = Math.min(last - 1, Math.floor(u));
+    const f = u - j;
+    for (let s = 0; s < 2; s++) {
+      const src = s === 0 ? dna.strandA : dna.strandB;
+      const a = j * 3;
+      const b = a + 3;
+      const th = src[a] + (src[b] - src[a]) * f;
+      const r = src[a + 1] + (src[b + 1] - src[a + 1]) * f;
+      const y = src[a + 2] + (src[b + 2] - src[a + 2]) * f;
+      const o = i * 6 + s * 3;
+      out.pos[o] = Math.cos(th) * r;
+      out.pos[o + 1] = y;
+      out.pos[o + 2] = Math.sin(th) * r;
+    }
+    out.gap[i] = 0.06;
+  }
+}
+
+/** Forms 0 and 4 (the helix) come from the real structure when it loaded; the procedural helix is the fallback. */
+export function buildForms(pairs: number, dna: DnaModel | null): FormBuffers[] {
   const forms = [0, 1, 2, 3, 4].map(() => createFormBuffers(pairs));
-  helix(forms[0], pairs, 1.05, 6.5, 2.9, 0);
+  if (dna) {
+    realHelix(forms[0], pairs, dna);
+    realHelix(forms[4], pairs, dna);
+  } else {
+    helix(forms[0], pairs, 1.05, 6.5, 2.9, 0);
+    helix(forms[4], pairs, 1.3, 7.0, 3.7, Math.PI * 0.5);
+  }
   fork(forms[1], pairs);
   cell(forms[2], pairs);
   plasmid(forms[3], pairs);
-  helix(forms[4], pairs, 1.3, 7.0, 3.7, Math.PI * 0.5);
   return forms;
 }
 

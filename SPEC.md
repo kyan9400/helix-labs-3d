@@ -93,8 +93,9 @@ Software renderers (SwiftShader, llvmpipe, softpipe, Microsoft Basic Render, Mes
 `?quality=low|medium|high` overrides (and forces the 3D on). A small local adaptive-DPR loop (`AdaptiveDpr.tsx`, 1 s
 windows) drops DPR by 0.25 below 45 fps (floor 0.75), raises it above 58 fps, and locks at 0.75 after 3 flip-flops.
 
-**Reduced motion.** Respects `prefers-reduced-motion` by default; a "Turn on full motion" toggle (hero + footer) stores
-the choice in `localStorage` (`helix-motion`), `?motion=full|reduced` overrides. Reduced = no spin, no particle drift,
+**Reduced motion.** Full motion by default on a first visit (even with the OS reduce-motion setting on); a "Reduce
+motion" / "Turn on full motion" toggle (hero + footer) stores the choice in `localStorage` (`helix-motion`) and later
+visits respect it; `?motion=full|reduced` overrides. Reduced = no spin, no particle drift,
 no read-head pulse, and forms **cut** at the chapter midpoint instead of sweeping. Scroll-linked content still works.
 
 **No WebGL / context lost.** A designed inline SVG poster of the helix (code-made) is always in the hero; the canvas

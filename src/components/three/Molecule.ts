@@ -3,6 +3,7 @@ import type { RootState } from "@react-three/fiber";
 import { Backbone } from "./Backbone";
 import { FORK_HEIGHT, FORK_SPLIT } from "./forms";
 import { BASE_3D, HelixSim, STRAND_COLORS, STRAND_LIGHT, TUBE_R } from "./HelixSim";
+import { EL_C, EL_N, EL_O, EL_P, type DnaModel } from "./dna";
 import type { TierSettings } from "@/lib/tiers";
 import { scrollState } from "@/lib/scroll-state";
 
@@ -13,11 +14,16 @@ import { scrollState } from "@/lib/scroll-state";
  *     lean (tilt; on phones the hero helix lies diagonally across the slide)
  *       inner (spin)
  *         2 glass backbone tubes (light packets run along them), pearl beads, half-rungs + rounded tips (read light),
- *         base-pair halos, polymerase ring, cell shells
+ *         base-pair halos, polymerase ring, cell shells,
+ *         real atoms of PDB 1BNA (one instanced sphere per atom, shown in the helix forms)
  * frame() runs everything for one rendered frame and says whether another frame is needed. No per-frame allocation.
  */
 
 const TILT = 0.22;
+/** scene units per ångström for the real structure (24 stacked base pairs ≈ the height of the old helix) */
+export const DNA_SCALE = 0.074;
+/** dodecamers stacked along the axis */
+export const DNA_COPIES = 2;
 const SPIN = 0.22;
 const INTRO_S = 1.8;
 const ENV_MIN = 0.15;
@@ -43,6 +49,14 @@ const TINT = [
 ].map(([c, e]) => [new THREE.Color(c), new THREE.Color(e)]);
 const TINT_LIGHT = ["#7CF2D8", "#86E8FF", "#A9B4FF", "#FFB4C8", "#9CF5C9"].map((h) => new THREE.Color(h));
 
+/*
+ * Real atoms: CPK element colours, tuned to the site's palette (carbon pearl-mint instead of black, nitrogen
+ * periwinkle, oxygen coral, phosphorus amber), and radii at half the van der Waals radius (a ball model).
+ */
+const ATOM_COLORS: Record<number, string> = { [EL_C]: "#A9DCCF", [EL_N]: "#8190FF", [EL_O]: "#FF6A4D", [EL_P]: "#FFB238" };
+const VDW: Record<number, number> = { [EL_C]: 1.7, [EL_N]: 1.55, [EL_O]: 1.52, [EL_P]: 1.8 };
+const ATOM_SIZE = 0.5;
+
 function clamp01(x: number) {
   return Math.min(1, Math.max(0, x));
 }
@@ -67,6 +81,49 @@ function withGlow<T extends THREE.Material>(mat: T): T {
       );
   };
   mat.customProgramCacheKey = () => "helix-glow";
+  return mat;
+}
+
+/**
+ * Real atoms: each sphere scales with its base pair's share of "real" (the same per-pair stagger the sim uses, so the
+ * molecule dissolves into the diagram as the strand unwinds and re-forms at the end), grows in with the intro, and
+ * glows as the read head passes. All on the GPU: the instance matrices are written once.
+ */
+function withAtoms<T extends THREE.Material>(mat: T, u: Record<string, { value: number }>): T {
+  mat.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, u);
+    shader.vertexShader = shader.vertexShader
+      .replace(
+        "#include <common>",
+        `#include <common>
+        attribute float aT;
+        uniform float uE;
+        uniform float uDir;
+        uniform float uIntro;
+        uniform float uHead;
+        uniform float uPulse;
+        varying float vAtomGlow;`,
+      )
+      .replace(
+        "#include <begin_vertex>",
+        `#include <begin_vertex>
+        float aK = clamp(uE * 1.55 - aT * 0.55, 0.0, 1.0);
+        aK = aK * aK * (3.0 - 2.0 * aK);
+        float aVis = uDir < -0.5 ? 1.0 - aK : (uDir > 0.5 ? aK : 0.0);
+        float aF = clamp(uIntro * 1.6 - aT * 0.6, 0.0, 1.0);
+        aF = aF * aF * aF * (aF * (aF * 6.0 - 15.0) + 10.0);
+        float aD = (aT - uHead) / 0.07;
+        vAtomGlow = uPulse * exp(-aD * aD);
+        transformed *= aVis * aF * (1.0 + 0.25 * vAtomGlow);`,
+      );
+    shader.fragmentShader = shader.fragmentShader
+      .replace("#include <common>", "#include <common>\nvarying float vAtomGlow;")
+      .replace(
+        "#include <emissivemap_fragment>",
+        "#include <emissivemap_fragment>\n#ifdef USE_COLOR\ntotalEmissiveRadiance += vColor.rgb * (0.1 + vAtomGlow * 1.5);\n#endif",
+      );
+  };
+  mat.customProgramCacheKey = () => "helix-atoms";
   return mat;
 }
 
@@ -293,12 +350,13 @@ export class Molecule {
   private readonly ringQuat = new THREE.Quaternion();
   private readonly uTime = { value: 0 };
   private readonly uFlow = { value: 0 };
+  private readonly atomU = { uE: { value: 0 }, uDir: { value: -1 }, uIntro: { value: 1 }, uHead: { value: -1 }, uPulse: { value: 0 } };
   private pulsing = false;
 
-  constructor(settings: TierSettings, calm: boolean) {
+  constructor(settings: TierSettings, calm: boolean, dna: DnaModel | null = null) {
     this.settings = settings;
     const n = settings.pairs;
-    const sim = new HelixSim(n);
+    const sim = new HelixSim(n, dna);
     this.sim = sim;
     sim.fd = scrollState.f;
     sim.intro = calm ? 1 : 0;
@@ -448,6 +506,40 @@ export class Molecule {
       }
     }
 
+    // real atoms of PDB 1BNA: one instanced sphere per atom, static matrices, coloured by element
+    if (dna) {
+      const count = dna.element.length;
+      const aSeg = Math.min(seg, 18);
+      const atomGeo = new THREE.SphereGeometry(1, aSeg, Math.max(6, Math.round(aSeg * 0.66)));
+      const along = new THREE.InstancedBufferAttribute(dna.along, 1);
+      atomGeo.setAttribute("aT", along);
+      const atomMat = withAtoms(
+        settings.physical
+          ? new THREE.MeshPhysicalMaterial({ roughness: 0.3, clearcoat: 0.8, clearcoatRoughness: 0.12 })
+          : new THREE.MeshStandardMaterial({ roughness: 0.34 }),
+        this.atomU,
+      );
+      const atomsMesh = new THREE.InstancedMesh(atomGeo, atomMat, count);
+      const m = new THREE.Matrix4();
+      const p = new THREE.Vector3();
+      const q = new THREE.Quaternion();
+      const sc = new THREE.Vector3();
+      const colors = Object.fromEntries(Object.entries(ATOM_COLORS).map(([k, v]) => [k, new THREE.Color(v)]));
+      for (let i = 0; i < count; i++) {
+        const el = dna.element[i];
+        const r = VDW[el] * ATOM_SIZE * DNA_SCALE;
+        p.set(dna.atoms[i * 3], dna.atoms[i * 3 + 1], dna.atoms[i * 3 + 2]);
+        sc.set(r, r, r);
+        m.compose(p, q, sc);
+        atomsMesh.setMatrixAt(i, m);
+        atomsMesh.setColorAt(i, colors[el]);
+      }
+      atomsMesh.frustumCulled = false;
+      this.atomU.uIntro.value = calm ? 1 : 0;
+      this.inner.add(atomsMesh);
+      this.disposables.push(atomGeo, atomMat, atomsMesh);
+    }
+
     // darkfield specimen window behind the molecule (does not lean or spin)
     const backGeo = new THREE.PlaneGeometry(1, 1);
     const tint = TINT[0];
@@ -550,6 +642,14 @@ export class Molecule {
     if (this.pulsing && !pulse) sim.resetGlow(this.rungs, this.tips);
     this.pulsing = pulse;
     this.write(pulse, w1);
+
+    // real atoms follow the sim's blend (the shader repeats its per-pair stagger)
+    const au = this.atomU;
+    au.uE.value = sim.e;
+    au.uDir.value = sim.seg === 0 ? -1 : sim.seg === 3 ? 1 : 0;
+    au.uIntro.value = sim.intro;
+    au.uHead.value = sim.head;
+    au.uPulse.value = pulse ? 1 : 0;
 
     // polymerase ring clamps on at the split point
     this.ring.visible = w1 > 0.001;

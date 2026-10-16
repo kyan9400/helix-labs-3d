@@ -22,6 +22,17 @@ avoids a second smoothing layer. Post-processing is not used.
 
 ## The signature 3D technique
 
+- **A real molecule.** The hero helix is real structure data: RCSB PDB entry **1BNA**, the Drew–Dickerson B-DNA
+  dodecamer (5'-CGCGAATTCGCG-3', X-ray, Drew et al., PNAS 1981), shipped in `public/structures/1BNA.pdb` (~10 KB gzip)
+  and parsed in the lazy 3D chunk (`src/components/three/dna.ts`). Every atom (486 per dodecamer) is an instanced
+  sphere coloured by element (CPK, tuned to the palette: carbon pearl-mint, nitrogen periwinkle, oxygen coral,
+  phosphorus amber) at half its van der Waals radius, and the glass backbone tubes run through the real phosphorus
+  atoms. To fill the hero, the dodecamer is stacked along its own axis with the screw measured from the crystal
+  (a least-squares fit of base pair *i* onto *i* + 6 over the backbone atoms): 3.28 Å rise and 35.9° twist per base
+  pair. As you scroll, the atoms dissolve pair by pair into the diagram (fork, cell, plasmid) and re-form at the end.
+  The base letters beside the hero and the colours of the rungs follow the real sequence. The static poster
+  (`public/structures/1bna-poster.svg`) is drawn from the same atoms by `scripts/make-dna-poster.mjs`.
+
 - **Smooth backbone + instanced bases.** Each strand is one continuous tube rebuilt in place every update:
   centripetal Catmull-Rom through the strand points, parallel-transport frames, analytic normals (`cos·N + sin·B`),
   rounded caps, and a closure span that seals the plasmid ring without a pop. Beads, open half-rungs and their
@@ -31,9 +42,10 @@ avoids a second smoothing layer. Post-processing is not used.
   the bases passing through it (emissive `aGlow` instance attribute injected in `onBeforeCompile`).
 - **Intro "lights on".** When the canvas is revealed, the pairs fly in from the cell field and assemble while the
   studio environment ramps up. Drag the hero molecule to spin it (inertia).
-- **Five procedural forms** (`src/components/three/forms.ts`): double helix with a 0.75π groove offset, a replication
-  fork (untwisted ladder that splits into a Y with unzipped rungs), a cell (pairs wound on a spherical spiral — strand
-  A = membrane, strand B = nucleus), a twisted plasmid ring, and a wider re-zipped helix.
+- **Five forms** (`src/components/three/forms.ts`): the real 1BNA helix (resampled along its phosphorus path), a
+  replication fork (untwisted ladder that splits into a Y with unzipped rungs), a cell (pairs wound on a spherical
+  spiral — strand A = membrane, strand B = nucleus), a twisted plasmid ring, and the real helix again. If the
+  structure file cannot load, a procedural helix stands in.
 - **Scroll → form index.** The viewport centre is mapped piecewise-linearly between the chapter centres to a
   continuous `f ∈ [0, 4]`. Each pair blends with a per-index stagger, so the change travels along the strand like an
   unwinding; a smoothstep plateau holds each form while you read. A "read head" pulse runs along the strand.
@@ -61,10 +73,10 @@ avoids a second smoothing layer. Post-processing is not used.
 
 ### Motion & fallback
 
-- `prefers-reduced-motion` is respected by default; a **"Turn on full motion"** toggle (hero + footer) stores the
-  choice in `localStorage`, and `?motion=full|reduced` overrides. Reduced motion = no spin, drift, pulse or parallax,
+- Full motion by default on a first visit; the **"Reduce motion"** toggle (hero + footer) switches to reduced motion
+  and stores the choice in `localStorage` so later visits respect it, and `?motion=full|reduced` overrides. Reduced motion = no spin, drift, pulse or parallax,
   and forms cut at chapter midpoints instead of sweeping.
-- No WebGL, a software renderer or a lost context → the designed SVG helix poster stays and the page is fully usable.
+- No WebGL, a software renderer or a lost context → the SVG poster of the real molecule stays and the page is fully usable.
 
 ## Project layout
 

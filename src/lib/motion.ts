@@ -1,8 +1,8 @@
 /*
  * Motion preference.
- * The OS "reduce motion" setting is respected by default, but many Windows users switch animations
- * off for speed rather than comfort, so the visitor can turn full motion back on. The choice is kept
- * in localStorage; ?motion=full|reduced in the URL wins (handy for testing).
+ * The site starts in full motion on a first visit (even when the OS asks for reduced motion: many Windows users
+ * switch animations off for speed rather than comfort). The "Reduce motion" toggle switches it off; that choice is
+ * kept in localStorage and respected on later visits. ?motion=full|reduced in the URL wins (handy for testing).
  * An inline script in the layout sets <html data-motion> before first paint (see MOTION_INIT_SCRIPT).
  */
 
@@ -11,7 +11,7 @@ export type MotionMode = "full" | "reduced";
 export const MOTION_KEY = "helix-motion";
 export const MOTION_EVENT = "helix:motion";
 
-export const MOTION_INIT_SCRIPT = `(function(){try{var d=document.documentElement;d.classList.add("js");var u=new URLSearchParams(location.search).get("motion");var s=null;try{s=localStorage.getItem("${MOTION_KEY}")}catch(e){}var c=(u==="full"||u==="reduced")?u:s;var sys=window.matchMedia("(prefers-reduced-motion: reduce)").matches;d.setAttribute("data-motion",c==="full"?"full":c==="reduced"?"reduced":(sys?"reduced":"full"));}catch(e){}})();`;
+export const MOTION_INIT_SCRIPT = `(function(){try{var d=document.documentElement;d.classList.add("js");var u=new URLSearchParams(location.search).get("motion");var s=null;try{s=localStorage.getItem("${MOTION_KEY}")}catch(e){}var c=(u==="full"||u==="reduced")?u:s;d.setAttribute("data-motion",c==="reduced"?"reduced":"full");}catch(e){}})();`;
 
 export function getMotion(): MotionMode {
   if (typeof document === "undefined") return "full";

@@ -8,6 +8,8 @@ const base = "/helix-labs-3d";
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  // the 3D chunk fetches public/ files (the PDB structure) and needs the Pages sub-path
+  env: { NEXT_PUBLIC_BASE_PATH: pages ? base : "" },
   experimental: {
     // CSS goes into the HTML: no render-blocking stylesheet request on mobile
     inlineCss: true,

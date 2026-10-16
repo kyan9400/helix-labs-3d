@@ -651,6 +651,28 @@ html[data-stage="fallback"] .stage-status__loading {
 html[data-stage="fallback"] .stage-status__static {
   display: inline;
 }
+/* shown once the real structure (PDB 1BNA) is on screen */
+.hero__caption {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-ink-2);
+  background: var(--color-paper);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--color-rule);
+  border-radius: var(--radius-tag);
+  opacity: 0;
+  transition: opacity 0.9s var(--ease-out) 0.6s;
+}
+html[data-stage="ready"][data-dna] .hero__caption {
+  opacity: 1;
+}
 html[data-motion="full"] .stage-status__loading {
   animation: blink 1.4s steps(2, end) infinite;
 }
@@ -743,7 +765,7 @@ html[data-motion="full"] .stage-status__loading {
   .hero__poster {
     height: 70vw;
     max-height: 420px;
-    transform: translate(-50%, -50%) rotate(-58deg);
+    transform: translate(-50%, -50%) rotate(-72deg);
   }
   .hero__visual .seq-ruler {
     display: none;

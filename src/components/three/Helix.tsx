@@ -3,12 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Molecule } from "./Molecule";
+import type { DnaModel } from "./dna";
 import type { TierSettings } from "@/lib/tiers";
 import { isReducedMotion, subscribeMotion } from "@/lib/motion";
 
 /** Mounts the molecule and drives it from the render loop (the loop only runs while something moves). */
-export default function Helix({ settings }: { settings: TierSettings }) {
-  const [molecule] = useState(() => new Molecule(settings, isReducedMotion()));
+export default function Helix({ settings, dna }: { settings: TierSettings; dna: DnaModel | null }) {
+  const [molecule] = useState(() => new Molecule(settings, isReducedMotion(), dna));
   const reduced = useRef(true);
 
   useEffect(() => {

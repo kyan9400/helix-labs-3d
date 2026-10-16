@@ -7,6 +7,8 @@ import AdaptiveDpr from "./AdaptiveDpr";
 import Helix from "./Helix";
 import CellField, { buildCellGeometry } from "./CellField";
 import { applyStudioEnvironment } from "./studioEnv";
+import { buildDna, type DnaModel } from "./dna";
+import { DNA_COPIES, DNA_SCALE } from "./Molecule";
 import { yieldToMain } from "@/lib/defer";
 import type { Tier } from "@/lib/quality";
 import { TIERS } from "@/lib/tiers";
@@ -156,6 +158,8 @@ export default function Scene({ tier, onReady, onLost }: SceneProps) {
   // so the adaptive DPR only samples while the loop runs continuously.
   const reduced = useSyncExternalStore(subscribeMotion, isReducedMotion, () => true);
   const [cells, setCells] = useState<THREE.BufferGeometry | null>(null);
+  // the real structure (PDB 1BNA); null = it could not load, so the procedural helix stands in
+  const [dna, setDna] = useState<DnaModel | null | undefined>(undefined);
 
   // build the particle buffers in their own task, before the Canvas mounts
   useEffect(() => {
@@ -174,7 +178,28 @@ export default function Scene({ tier, onReady, onLost }: SceneProps) {
     };
   }, [settings.particles]);
 
-  if (!cells) return null;
+  // fetch + parse the structure file (~10 KB gzip, same origin) while the particles build
+  useEffect(() => {
+    let alive = true;
+    fetch(`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/structures/1BNA.pdb`)
+      .then((r) => (r.ok ? r.text() : Promise.reject(new Error(String(r.status)))))
+      .then(async (text) => {
+        await yieldToMain();
+        return buildDna(text, DNA_COPIES, DNA_SCALE);
+      })
+      .catch(() => null)
+      .then((model) => {
+        if (!alive) return;
+        // the hero caption names the structure only when it is really the one on screen
+        if (model) document.documentElement.dataset.dna = "1bna";
+        setDna(model);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  if (!cells || dna === undefined) return null;
 
   return (
     <Canvas
@@ -205,7 +230,7 @@ export default function Scene({ tier, onReady, onLost }: SceneProps) {
       )}
       <Lighting />
       <CellField geometry={cells} />
-      <Helix settings={settings} />
+      <Helix settings={settings} dna={dna} />
       <Driver />
       <DragSpin />
       <Warmup onReady={onReady} />

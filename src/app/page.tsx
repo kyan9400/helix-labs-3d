@@ -85,7 +85,7 @@ const SERVICES = [
     body: "Each year we compare your epigenetic age, bloods and lifestyle data with last year's, and adjust one plan that you and your clinician own together.",
     points: ["Epigenetic age assay", "Quarterly bloods with trend lines", "Plan reviewed every three months"],
     price: "€1,650 / year",
-    form: "The helix re-zips, wider — renewal",
+    form: "The real helix re-forms, atom by atom — renewal",
     accent: "amber",
   },
 ];
@@ -244,6 +244,7 @@ export default function Home() {
                 <span className="stage-status__loading">Sequencing…</span>
                 <span className="stage-status__static">Static view</span>
               </p>
+              <p className="hero__caption">Real B-DNA structure · PDB 1BNA</p>
             </div>
           </div>
           <a className="hero__scroll" href="#services">
