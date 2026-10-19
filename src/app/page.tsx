@@ -455,7 +455,7 @@ export default function Home() {
           <div>
             <h2 className="site-footer__label">Design &amp; build</h2>
             <p>
-              <a href="https://alhassan-portfolio-sigma.vercel.app" rel="noopener">
+              <a href={process.env.NEXT_PUBLIC_PORTFOLIO_URL ?? "https://alhassan-portfolio-sigma.vercel.app"} rel="noopener">
                 Alhassan Alfarran
               </a>
               <br />
